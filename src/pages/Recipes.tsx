@@ -1,22 +1,28 @@
 import { useEffect, useState, useRef } from 'react'
 import { supabase } from '../lib/supabase'
-import type { Recipe, RecipeIngredient } from '../types'
+import type { Recipe, RecipeIngredient, RecipeCategory } from '../types'
 
 export default function Recipes() {
   const [recipes, setRecipes] = useState<Recipe[]>([])
+  const [categories, setCategories] = useState<RecipeCategory[]>([])
   const [expanded, setExpanded] = useState<string | null>(null)
   const [showForm, setShowForm] = useState(false)
   const [editRecipe, setEditRecipe] = useState<Recipe | null>(null)
   const [loading, setLoading] = useState(true)
   const [importError, setImportError] = useState('')
+  const [filterCategory, setFilterCategory] = useState<string | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
 
-  useEffect(() => { fetchRecipes() }, [])
+  useEffect(() => { fetchAll() }, [])
 
-  async function fetchRecipes() {
+  async function fetchAll() {
     setLoading(true)
-    const { data } = await supabase.from('recipes').select('*, ingredients:recipe_ingredients(*)').order('name')
-    setRecipes(data ?? [])
+    const [{ data: recipesData }, { data: categoriesData }] = await Promise.all([
+      supabase.from('recipes').select('*, ingredients:recipe_ingredients(*), category:recipe_categories(*)').order('name'),
+      supabase.from('recipe_categories').select('*').order('name'),
+    ])
+    setRecipes(recipesData ?? [])
+    setCategories(categoriesData ?? [])
     setLoading(false)
   }
 
@@ -48,12 +54,16 @@ export default function Recipes() {
         })
         if (rows.length) await supabase.from('recipe_ingredients').insert(rows)
       }
-      await fetchRecipes()
+      await fetchAll()
     } catch (err: unknown) {
       setImportError(err instanceof Error ? err.message : 'Import failed')
     }
     if (fileRef.current) fileRef.current.value = ''
   }
+
+  const filtered = filterCategory
+    ? recipes.filter(r => r.category_id === filterCategory)
+    : recipes
 
   return (
     <div className="max-w-lg mx-auto px-4 py-5">
@@ -82,10 +92,36 @@ export default function Recipes() {
         </div>
       )}
 
+      {/* Category filter pills */}
+      {categories.length > 0 && (
+        <div className="flex gap-2 mb-4 overflow-x-auto pb-1">
+          <button
+            onClick={() => setFilterCategory(null)}
+            className={`flex-shrink-0 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+              filterCategory === null ? 'bg-green-500 text-zinc-950' : 'bg-zinc-800 text-zinc-400 hover:text-zinc-200'
+            }`}
+          >
+            All
+          </button>
+          {categories.map(cat => (
+            <button
+              key={cat.id}
+              onClick={() => setFilterCategory(filterCategory === cat.id ? null : cat.id)}
+              className={`flex-shrink-0 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                filterCategory === cat.id ? 'bg-green-500 text-zinc-950' : 'bg-zinc-800 text-zinc-400 hover:text-zinc-200'
+              }`}
+            >
+              {cat.name}
+            </button>
+          ))}
+        </div>
+      )}
+
       {showForm && (
         <RecipeForm
           recipe={editRecipe}
-          onSave={async () => { await fetchRecipes(); setShowForm(false) }}
+          categories={categories}
+          onSave={async () => { await fetchAll(); setShowForm(false) }}
           onCancel={() => setShowForm(false)}
         />
       )}
@@ -96,17 +132,24 @@ export default function Recipes() {
         </div>
       ) : (
         <div className="flex flex-col gap-2">
-          {recipes.length === 0 && (
+          {filtered.length === 0 && (
             <p className="text-center text-zinc-600 py-10 text-sm">No recipes yet.</p>
           )}
-          {recipes.map(recipe => (
+          {filtered.map(recipe => (
             <div key={recipe.id} className="bg-zinc-900 rounded-xl border border-zinc-800">
               <button
                 onClick={() => setExpanded(expanded === recipe.id ? null : recipe.id)}
-                className="w-full flex items-center justify-between px-4 py-3.5 text-left"
+                className="w-full flex items-center justify-between px-4 py-3.5 text-left gap-2"
               >
-                <span className="font-medium text-zinc-100 text-sm">{recipe.name}</span>
-                <span className="text-zinc-600 text-sm">{expanded === recipe.id ? '▲' : '▼'}</span>
+                <div className="flex items-center gap-2 min-w-0">
+                  <span className="font-medium text-zinc-100 text-sm truncate">{recipe.name}</span>
+                  {recipe.category && (
+                    <span className="flex-shrink-0 text-[10px] font-medium bg-zinc-700 text-zinc-400 rounded-md px-1.5 py-0.5">
+                      {recipe.category.name}
+                    </span>
+                  )}
+                </div>
+                <span className="text-zinc-600 text-sm flex-shrink-0">{expanded === recipe.id ? '▲' : '▼'}</span>
               </button>
 
               {expanded === recipe.id && (
@@ -160,15 +203,20 @@ function parseCsvLine(line: string): [string, string] {
 
 interface RecipeFormProps {
   recipe: Recipe | null
+  categories: RecipeCategory[]
   onSave: () => void
   onCancel: () => void
 }
 
-function RecipeForm({ recipe, onSave, onCancel }: RecipeFormProps) {
+function RecipeForm({ recipe, categories: initialCategories, onSave, onCancel }: RecipeFormProps) {
   const [name, setName] = useState(recipe?.name ?? '')
   const [ingredients, setIngredients] = useState<Partial<RecipeIngredient>[]>(
     recipe?.ingredients?.length ? recipe.ingredients : [{ name: '', quantity: null, unit: null }]
   )
+  const [categories, setCategories] = useState<RecipeCategory[]>(initialCategories)
+  const [categoryId, setCategoryId] = useState<string>(recipe?.category_id ?? '')
+  const [newCategoryName, setNewCategoryName] = useState('')
+  const [creatingCategory, setCreatingCategory] = useState(false)
   const [saving, setSaving] = useState(false)
 
   function updateIng(i: number, field: keyof RecipeIngredient, value: string) {
@@ -177,16 +225,28 @@ function RecipeForm({ recipe, onSave, onCancel }: RecipeFormProps) {
     ))
   }
 
+  async function createCategory() {
+    const trimmed = newCategoryName.trim()
+    if (!trimmed) return
+    const { data } = await supabase.from('recipe_categories').insert({ name: trimmed }).select().single()
+    if (data) {
+      setCategories(prev => [...prev, data].sort((a, b) => a.name.localeCompare(b.name)))
+      setCategoryId(data.id)
+    }
+    setNewCategoryName('')
+    setCreatingCategory(false)
+  }
+
   async function save() {
     if (!name.trim()) return
     setSaving(true)
     if (recipe) {
-      await supabase.from('recipes').update({ name: name.trim() }).eq('id', recipe.id)
+      await supabase.from('recipes').update({ name: name.trim(), category_id: categoryId || null }).eq('id', recipe.id)
       await supabase.from('recipe_ingredients').delete().eq('recipe_id', recipe.id)
       const rows = ingredients.filter(i => i.name?.trim()).map(i => ({ recipe_id: recipe.id, name: i.name!.trim(), quantity: i.quantity ?? null, unit: i.unit ?? null }))
       if (rows.length) await supabase.from('recipe_ingredients').insert(rows)
     } else {
-      const { data } = await supabase.from('recipes').insert({ name: name.trim() }).select().single()
+      const { data } = await supabase.from('recipes').insert({ name: name.trim(), category_id: categoryId || null }).select().single()
       if (data) {
         const rows = ingredients.filter(i => i.name?.trim()).map(i => ({ recipe_id: data.id, name: i.name!.trim(), quantity: i.quantity ?? null, unit: i.unit ?? null }))
         if (rows.length) await supabase.from('recipe_ingredients').insert(rows)
@@ -196,38 +256,61 @@ function RecipeForm({ recipe, onSave, onCancel }: RecipeFormProps) {
     onSave()
   }
 
+  const inputClass = "w-full bg-zinc-800 border border-zinc-700 rounded-xl px-3 py-2.5 text-sm text-zinc-100 placeholder-zinc-600 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
+
   return (
     <div className="bg-zinc-900 border border-zinc-700 rounded-xl p-4 mb-4">
       <h3 className="font-semibold text-zinc-100 mb-3">{recipe ? 'Edit Recipe' : 'New Recipe'}</h3>
-      <input
-        value={name}
-        onChange={e => setName(e.target.value)}
-        placeholder="Recipe name"
-        className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-3 py-2.5 text-sm text-zinc-100 placeholder-zinc-600 mb-3 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
-      />
+
+      <input value={name} onChange={e => setName(e.target.value)} placeholder="Recipe name" className={`${inputClass} mb-3`} />
+
+      {/* Category */}
+      <div className="mb-3">
+        <label className="block text-[10px] text-zinc-600 uppercase tracking-wider mb-1.5">Category</label>
+        {!creatingCategory ? (
+          <div className="flex gap-2">
+            <select
+              value={categoryId}
+              onChange={e => setCategoryId(e.target.value)}
+              className="flex-1 bg-zinc-800 border border-zinc-700 rounded-xl px-3 py-2.5 text-sm text-zinc-100 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
+            >
+              <option value="">No category</option>
+              {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+            </select>
+            <button
+              type="button"
+              onClick={() => setCreatingCategory(true)}
+              className="px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-xl text-sm text-zinc-400 hover:text-zinc-200 hover:bg-zinc-700 transition-colors whitespace-nowrap"
+            >
+              + New
+            </button>
+          </div>
+        ) : (
+          <div className="flex gap-2">
+            <input
+              value={newCategoryName}
+              onChange={e => setNewCategoryName(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && createCategory()}
+              placeholder="Category name"
+              autoFocus
+              className="flex-1 bg-zinc-800 border border-zinc-700 rounded-xl px-3 py-2.5 text-sm text-zinc-100 placeholder-zinc-600 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
+            />
+            <button onClick={createCategory} className="px-3 py-2 bg-green-500 hover:bg-green-400 text-zinc-950 rounded-xl text-sm font-bold transition-colors">Add</button>
+            <button onClick={() => setCreatingCategory(false)} className="px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-xl text-sm text-zinc-400 hover:bg-zinc-700 transition-colors">✕</button>
+          </div>
+        )}
+      </div>
+
       <p className="text-[10px] text-zinc-600 uppercase tracking-wider mb-2">Ingredients</p>
       <div className="flex flex-col gap-2 mb-3">
         {ingredients.map((ing, i) => (
           <div key={i} className="flex gap-2 items-center">
-            <input
-              value={ing.quantity ?? ''}
-              onChange={e => updateIng(i, 'quantity', e.target.value)}
-              placeholder="Qty"
-              type="number"
-              className="w-14 bg-zinc-800 border border-zinc-700 rounded-lg px-2 py-1.5 text-sm text-zinc-100 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
-            />
-            <input
-              value={ing.unit ?? ''}
-              onChange={e => updateIng(i, 'unit', e.target.value)}
-              placeholder="Unit"
-              className="w-14 bg-zinc-800 border border-zinc-700 rounded-lg px-2 py-1.5 text-sm text-zinc-100 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
-            />
-            <input
-              value={ing.name ?? ''}
-              onChange={e => updateIng(i, 'name', e.target.value)}
-              placeholder="Ingredient"
-              className="flex-1 bg-zinc-800 border border-zinc-700 rounded-lg px-2 py-1.5 text-sm text-zinc-100 placeholder-zinc-600 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
-            />
+            <input value={ing.quantity ?? ''} onChange={e => updateIng(i, 'quantity', e.target.value)} placeholder="Qty" type="number"
+              className="w-14 bg-zinc-800 border border-zinc-700 rounded-lg px-2 py-1.5 text-sm text-zinc-100 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent" />
+            <input value={ing.unit ?? ''} onChange={e => updateIng(i, 'unit', e.target.value)} placeholder="Unit"
+              className="w-14 bg-zinc-800 border border-zinc-700 rounded-lg px-2 py-1.5 text-sm text-zinc-100 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent" />
+            <input value={ing.name ?? ''} onChange={e => updateIng(i, 'name', e.target.value)} placeholder="Ingredient"
+              className="flex-1 bg-zinc-800 border border-zinc-700 rounded-lg px-2 py-1.5 text-sm text-zinc-100 placeholder-zinc-600 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent" />
             <button onClick={() => setIngredients(p => p.filter((_, idx) => idx !== i))} className="text-zinc-700 hover:text-red-400 text-lg transition-colors">×</button>
           </div>
         ))}

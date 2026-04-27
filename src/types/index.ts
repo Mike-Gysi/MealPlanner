@@ -1,6 +1,13 @@
+export interface RecipeCategory {
+  id: string
+  name: string
+}
+
 export interface Recipe {
   id: string
   name: string
+  category_id: string | null
+  category?: RecipeCategory
   created_at: string
   ingredients?: RecipeIngredient[]
 }
