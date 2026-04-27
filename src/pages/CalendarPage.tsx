@@ -11,14 +11,15 @@ const MEAL_TYPES = ['breakfast', 'lunch', 'dinner'] as const
 type MealType = typeof MEAL_TYPES[number]
 
 const MEAL_COLORS: Record<MealType, string> = {
-  breakfast: 'bg-amber-400',
+  breakfast: 'bg-amber-500',
   lunch: 'bg-blue-500',
-  dinner: 'bg-violet-500',
+  dinner: 'bg-violet-600',
 }
-const MEAL_LABELS: Record<MealType, string> = {
-  breakfast: 'B',
-  lunch: 'L',
-  dinner: 'D',
+
+const MEAL_BTN_ACTIVE: Record<MealType, string> = {
+  breakfast: 'bg-amber-500 text-zinc-950',
+  lunch: 'bg-blue-500 text-white',
+  dinner: 'bg-violet-600 text-white',
 }
 
 type ViewMode = 'month' | 'week' | 'day'
@@ -51,6 +52,11 @@ export default function CalendarPage() {
 
   function openSlot(date: Date, meal: MealType) {
     setModal({ date: format(date, 'yyyy-MM-dd'), meal, entry: getEntry(date, meal) })
+  }
+
+  function openDay(date: Date) {
+    setCurrent(date)
+    setView('day')
   }
 
   function navigate(dir: 1 | -1) {
@@ -86,20 +92,20 @@ export default function CalendarPage() {
   const days = daysForView()
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-full min-h-0">
       {/* Header */}
-      <div className="bg-white border-b border-gray-200 px-4 py-3 flex items-center gap-2 sticky top-[57px] z-30">
-        <button onClick={() => navigate(-1)} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-600 text-lg">‹</button>
-        <button onClick={() => navigate(1)} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-600 text-lg">›</button>
-        <span className="flex-1 text-sm font-semibold text-gray-800 text-center">{title()}</span>
-        <button onClick={() => setCurrent(new Date())} className="text-xs text-green-700 font-medium border border-green-300 rounded-lg px-2 py-1">Today</button>
-        <div className="flex bg-gray-100 rounded-lg p-0.5">
+      <div className="bg-zinc-900 border-b border-zinc-800 px-3 py-3 flex items-center gap-2 flex-shrink-0 z-30">
+        <button onClick={() => navigate(-1)} className="p-1.5 rounded-lg hover:bg-zinc-800 text-zinc-400 text-lg transition-colors">‹</button>
+        <button onClick={() => navigate(1)} className="p-1.5 rounded-lg hover:bg-zinc-800 text-zinc-400 text-lg transition-colors">›</button>
+        <span className="flex-1 text-sm font-semibold text-zinc-100 text-center">{title()}</span>
+        <button onClick={() => setCurrent(new Date())} className="text-xs text-green-400 font-medium border border-green-500/30 rounded-lg px-2 py-1 hover:bg-green-500/10 transition-colors">Today</button>
+        <div className="flex bg-zinc-800 rounded-lg p-0.5">
           {(['month', 'week', 'day'] as ViewMode[]).map(v => (
             <button
               key={v}
               onClick={() => setView(v)}
               className={`px-2 py-1 text-xs font-medium rounded-md capitalize transition-colors ${
-                view === v ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-500'
+                view === v ? 'bg-zinc-600 text-zinc-100' : 'text-zinc-500 hover:text-zinc-300'
               }`}
             >
               {v}
@@ -109,12 +115,12 @@ export default function CalendarPage() {
       </div>
 
       {/* Calendar body */}
-      <div className="flex-1 overflow-y-auto">
+      <div className="flex-1 overflow-y-auto min-h-0 flex flex-col">
         {view === 'month' && (
-          <MonthView days={days} current={current} getEntry={getEntry} openSlot={openSlot} />
+          <MonthView days={days} current={current} getEntry={getEntry} openDay={openDay} />
         )}
         {view === 'week' && (
-          <WeekView days={days} getEntry={getEntry} openSlot={openSlot} />
+          <WeekView days={days} getEntry={getEntry} openDay={openDay} />
         )}
         {view === 'day' && (
           <DayView day={current} getEntry={getEntry} openSlot={openSlot} />
@@ -138,60 +144,51 @@ export default function CalendarPage() {
 
 // ── Month View ──────────────────────────────────────────────────────────────
 
-interface ViewProps {
+const DOT_COLORS: Record<MealType, string> = {
+  breakfast: 'bg-amber-500',
+  lunch: 'bg-blue-500',
+  dinner: 'bg-violet-500',
+}
+
+interface MonthWeekProps {
   days: Date[]
   current?: Date
   getEntry: (date: Date, meal: MealType) => CalendarEntry | null
-  openSlot: (date: Date, meal: MealType) => void
+  openDay: (date: Date) => void
 }
 
-function MonthView({ days, current, getEntry, openSlot }: ViewProps) {
+function MonthView({ days, current, getEntry, openDay }: MonthWeekProps) {
   const weekDays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+  const numWeeks = days.length / 7
   return (
-    <div>
-      <div className="grid grid-cols-7 border-b border-gray-100">
+    <div className="flex flex-col flex-1 min-h-0">
+      <div className="grid grid-cols-7 border-b border-zinc-800 flex-shrink-0">
         {weekDays.map(d => (
-          <div key={d} className="text-center text-xs text-gray-400 py-1.5 font-medium">{d}</div>
+          <div key={d} className="text-center text-xs text-zinc-600 py-2 font-medium">{d}</div>
         ))}
       </div>
-      <div className="grid grid-cols-7">
+      <div className="grid grid-cols-7 flex-1" style={{ gridTemplateRows: `repeat(${numWeeks}, 1fr)` }}>
         {days.map(day => {
           const inMonth = current ? isSameMonth(day, current) : true
           const today = isToday(day)
+          const dots = MEAL_TYPES.filter(m => getEntry(day, m))
           return (
-            <div
+            <button
               key={day.toISOString()}
-              className={`border-b border-r border-gray-100 p-1 min-h-[80px] ${!inMonth ? 'bg-gray-50' : ''}`}
+              onClick={() => openDay(day)}
+              className={`border-b border-r border-zinc-800 p-1 flex flex-col items-center justify-start gap-1 transition-colors hover:bg-zinc-800/50 ${!inMonth ? 'opacity-30' : ''}`}
             >
-              <div className={`text-xs font-medium mb-1 w-5 h-5 flex items-center justify-center rounded-full ${
-                today ? 'bg-green-600 text-white' : inMonth ? 'text-gray-700' : 'text-gray-300'
+              <div className={`text-xs font-medium w-6 h-6 flex items-center justify-center rounded-full ${
+                today ? 'bg-green-500 text-zinc-950 font-bold' : 'text-zinc-300'
               }`}>
                 {format(day, 'd')}
               </div>
-              <div className="flex flex-col gap-0.5">
-                {MEAL_TYPES.map(meal => {
-                  const entry = getEntry(day, meal)
-                  const label = entry?.recipe?.name ?? entry?.custom_text ?? null
-                  return (
-                    <button
-                      key={meal}
-                      onClick={() => openSlot(day, meal)}
-                      className={`w-full text-left rounded px-1 py-0.5 text-[10px] leading-tight transition-colors ${
-                        entry
-                          ? `${MEAL_COLORS[meal]} text-white`
-                          : 'text-gray-300 hover:bg-gray-100'
-                      }`}
-                    >
-                      {entry ? (
-                        <span className="truncate block">{MEAL_LABELS[meal]}: {label}</span>
-                      ) : (
-                        <span>{MEAL_LABELS[meal]}</span>
-                      )}
-                    </button>
-                  )
-                })}
-              </div>
-            </div>
+              {dots.length > 0 && (
+                <div className="flex gap-0.5">
+                  {dots.map(m => <span key={m} className={`w-1.5 h-1.5 rounded-full ${DOT_COLORS[m]}`} />)}
+                </div>
+              )}
+            </button>
           )
         })}
       </div>
@@ -201,40 +198,32 @@ function MonthView({ days, current, getEntry, openSlot }: ViewProps) {
 
 // ── Week View ───────────────────────────────────────────────────────────────
 
-function WeekView({ days, getEntry, openSlot }: ViewProps) {
+function WeekView({ days, getEntry, openDay }: MonthWeekProps) {
   return (
-    <div className="grid grid-cols-7 divide-x divide-gray-100 min-h-[400px]">
+    <div className="grid grid-cols-7 divide-x divide-zinc-800 flex-1 min-h-0">
       {days.map(day => {
         const today = isToday(day)
+        const dots = MEAL_TYPES.filter(m => getEntry(day, m))
         return (
-          <div key={day.toISOString()} className="flex flex-col">
-            <div className={`text-center py-2 text-xs font-medium border-b border-gray-100 ${today ? 'text-green-700' : 'text-gray-500'}`}>
-              <div>{format(day, 'EEE')}</div>
-              <div className={`mx-auto w-6 h-6 flex items-center justify-center rounded-full text-sm ${today ? 'bg-green-600 text-white' : 'text-gray-700'}`}>
-                {format(day, 'd')}
+          <button
+            key={day.toISOString()}
+            onClick={() => openDay(day)}
+            className="flex flex-col items-center justify-start pt-4 gap-2 hover:bg-zinc-800/50 transition-colors"
+          >
+            <div className={`text-xs font-medium ${today ? 'text-green-400' : 'text-zinc-500'}`}>
+              {format(day, 'EEE')}
+            </div>
+            <div className={`w-8 h-8 flex items-center justify-center rounded-full text-sm font-semibold ${
+              today ? 'bg-green-500 text-zinc-950' : 'text-zinc-200'
+            }`}>
+              {format(day, 'd')}
+            </div>
+            {dots.length > 0 && (
+              <div className="flex flex-col gap-1">
+                {dots.map(m => <span key={m} className={`w-2 h-2 rounded-full ${DOT_COLORS[m]}`} />)}
               </div>
-            </div>
-            <div className="flex flex-col gap-1 p-1 flex-1">
-              {MEAL_TYPES.map(meal => {
-                const entry = getEntry(day, meal)
-                const label = entry?.recipe?.name ?? entry?.custom_text ?? null
-                return (
-                  <button
-                    key={meal}
-                    onClick={() => openSlot(day, meal)}
-                    className={`rounded-lg px-1.5 py-2 text-[10px] font-medium text-left transition-colors min-h-[40px] ${
-                      entry
-                        ? `${MEAL_COLORS[meal]} text-white`
-                        : 'border border-dashed border-gray-200 text-gray-300 hover:border-gray-300'
-                    }`}
-                  >
-                    <div className="font-semibold capitalize">{meal.charAt(0).toUpperCase() + meal.slice(1,1)}{meal.charAt(0)}</div>
-                    {label && <div className="truncate leading-tight mt-0.5">{label}</div>}
-                  </button>
-                )
-              })}
-            </div>
-          </div>
+            )}
+          </button>
         )
       })}
     </div>
@@ -250,35 +239,33 @@ interface DayViewProps {
 }
 
 function DayView({ day, getEntry, openSlot }: DayViewProps) {
+  const plannedMeals = MEAL_TYPES.map(m => ({ meal: m, entry: getEntry(day, m) }))
+  const nextMeal = MEAL_TYPES.find(m => !getEntry(day, m)) ?? 'dinner'
+
   return (
-    <div className="max-w-lg mx-auto px-4 py-4 flex flex-col gap-3">
-      {MEAL_TYPES.map(meal => {
-        const entry = getEntry(day, meal)
+    <div className="max-w-lg mx-auto px-4 py-4 flex flex-col gap-3 flex-1 min-h-0">
+      {plannedMeals.map(({ meal, entry }) => {
         const label = entry?.recipe?.name ?? entry?.custom_text ?? null
+        if (!entry) return null
         return (
           <button
             key={meal}
             onClick={() => openSlot(day, meal)}
-            className={`w-full rounded-2xl p-4 text-left transition-all ${
-              entry
-                ? `${MEAL_COLORS[meal]} text-white shadow-sm`
-                : 'border-2 border-dashed border-gray-200 hover:border-gray-300'
-            }`}
+            className={`w-full rounded-2xl p-4 text-left shadow-lg ${MEAL_COLORS[meal]}`}
           >
-            <div className={`text-sm font-semibold capitalize mb-1 ${entry ? 'text-white/80' : 'text-gray-400'}`}>
-              {meal}
-            </div>
-            {label ? (
-              <div className="text-base font-semibold">{label}</div>
-            ) : (
-              <div className="text-gray-400 text-sm">Tap to add</div>
-            )}
-            {entry?.leftover_of && (
-              <div className={`text-xs mt-1 ${entry ? 'text-white/70' : 'text-gray-400'}`}>↩ Leftover</div>
-            )}
+            <div className="text-xs font-semibold capitalize text-white/70 mb-1 uppercase tracking-wide">{meal}</div>
+            <div className="text-base font-bold text-white">{label}</div>
+            {entry.leftover_of && <div className="text-xs mt-1 text-white/60">↩ Leftover</div>}
           </button>
         )
       })}
+
+      <button
+        onClick={() => openSlot(day, nextMeal)}
+        className="w-full rounded-2xl p-4 text-left border-2 border-dashed border-zinc-700 hover:border-green-500/50 hover:bg-green-500/5 transition-all text-zinc-600 hover:text-green-400"
+      >
+        + Add meal
+      </button>
     </div>
   )
 }
@@ -301,6 +288,16 @@ function MealModal({ date, meal, entry, recipes, allEntries, onClose, onSaved }:
   const [recipeId, setRecipeId] = useState(entry?.recipe_id ?? '')
   const [customText, setCustomText] = useState(entry?.custom_text ?? '')
   const [leftoverOf, setLeftoverOf] = useState(entry?.leftover_of ?? '')
+
+  function handleLeftoverChange(id: string) {
+    setLeftoverOf(id)
+    if (id) {
+      const source = allEntries.find(e => e.id === id)
+      const sourceName = source?.recipe?.name ?? source?.custom_text ?? ''
+      setCustomText(`Leftover - ${sourceName}`)
+      setMode('text')
+    }
+  }
   const [addToShopping, setAddToShopping] = useState(false)
   const [saving, setSaving] = useState(false)
 
@@ -336,13 +333,13 @@ function MealModal({ date, meal, entry, recipes, allEntries, onClose, onSaved }:
   const canSave = mode === 'recipe' ? !!recipeId : !!customText.trim()
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40" onClick={onClose}>
-      <div className="bg-white w-full max-w-lg rounded-t-2xl p-6 pb-8 shadow-xl" onClick={e => e.stopPropagation()}>
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="font-semibold text-gray-800">
-            {entry ? 'Edit' : 'Add'} — {format(new Date(date + 'T12:00:00'), 'EEE d MMM')}
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4" onClick={onClose}>
+      <div className="bg-zinc-900 border border-zinc-700 w-full max-w-lg rounded-2xl p-6 shadow-2xl" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between mb-5">
+          <h3 className="font-semibold text-zinc-100">
+            {entry ? 'Edit meal' : 'Add meal'} — {format(new Date(date + 'T12:00:00'), 'EEE d MMM')}
           </h3>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-2xl leading-none">×</button>
+          <button onClick={onClose} className="text-zinc-600 hover:text-zinc-300 text-2xl leading-none transition-colors">×</button>
         </div>
 
         <div className="flex gap-2 mb-4">
@@ -350,8 +347,8 @@ function MealModal({ date, meal, entry, recipes, allEntries, onClose, onSaved }:
             <button
               key={m}
               onClick={() => setSelectedMeal(m)}
-              className={`flex-1 py-1.5 text-sm font-medium rounded-lg capitalize transition-colors ${
-                selectedMeal === m ? `${MEAL_COLORS[m]} text-white` : 'bg-gray-100 text-gray-600'
+              className={`flex-1 py-2 text-sm font-semibold rounded-xl capitalize transition-all ${
+                selectedMeal === m ? MEAL_BTN_ACTIVE[m] : 'bg-zinc-800 text-zinc-500 hover:text-zinc-300'
               }`}
             >
               {m}
@@ -359,13 +356,13 @@ function MealModal({ date, meal, entry, recipes, allEntries, onClose, onSaved }:
           ))}
         </div>
 
-        <div className="flex gap-1 bg-gray-100 rounded-lg p-1 mb-4">
+        <div className="flex gap-1 bg-zinc-800 rounded-xl p-1 mb-4">
           {(['recipe', 'text'] as const).map(m => (
             <button
               key={m}
               onClick={() => setMode(m)}
-              className={`flex-1 py-1.5 text-sm font-medium rounded-md transition-colors ${
-                mode === m ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-500'
+              className={`flex-1 py-1.5 text-sm font-medium rounded-lg transition-colors ${
+                mode === m ? 'bg-zinc-700 text-zinc-100' : 'text-zinc-500 hover:text-zinc-300'
               }`}
             >
               {m === 'recipe' ? 'From recipe' : 'Custom text'}
@@ -378,14 +375,14 @@ function MealModal({ date, meal, entry, recipes, allEntries, onClose, onSaved }:
             <select
               value={recipeId}
               onChange={e => setRecipeId(e.target.value)}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
+              className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-3 py-2.5 text-sm text-zinc-100 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
             >
               <option value="">Select a recipe…</option>
               {recipes.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
             </select>
             {recipeId && (
-              <label className="flex items-center gap-2 mt-3 text-sm text-gray-700">
-                <input type="checkbox" checked={addToShopping} onChange={e => setAddToShopping(e.target.checked)} className="rounded" />
+              <label className="flex items-center gap-2 mt-3 text-sm text-zinc-400">
+                <input type="checkbox" checked={addToShopping} onChange={e => setAddToShopping(e.target.checked)} className="rounded accent-green-500" />
                 Add ingredients to shopping list
               </label>
             )}
@@ -395,16 +392,16 @@ function MealModal({ date, meal, entry, recipes, allEntries, onClose, onSaved }:
             value={customText}
             onChange={e => setCustomText(e.target.value)}
             placeholder="What are you eating?"
-            className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm mb-4 focus:outline-none focus:ring-2 focus:ring-green-500"
+            className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-3 py-2.5 text-sm text-zinc-100 placeholder-zinc-600 mb-4 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
           />
         )}
 
         <div className="mb-5">
-          <label className="block text-xs text-gray-500 uppercase tracking-wide mb-1">Leftover of (optional)</label>
+          <label className="block text-xs text-zinc-600 uppercase tracking-wide mb-1.5">Leftover of (optional)</label>
           <select
             value={leftoverOf}
-            onChange={e => setLeftoverOf(e.target.value)}
-            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
+            onChange={e => handleLeftoverChange(e.target.value)}
+            className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-3 py-2.5 text-sm text-zinc-100 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
           >
             <option value="">— None —</option>
             {otherEntries.map(e => (
@@ -419,12 +416,12 @@ function MealModal({ date, meal, entry, recipes, allEntries, onClose, onSaved }:
           <button
             onClick={save}
             disabled={saving || !canSave}
-            className="flex-1 bg-green-600 hover:bg-green-700 text-white rounded-lg py-2.5 text-sm font-semibold disabled:opacity-40"
+            className="flex-1 bg-green-500 hover:bg-green-400 text-zinc-950 rounded-xl py-2.5 text-sm font-bold disabled:opacity-30 transition-colors"
           >
             {saving ? 'Saving…' : entry ? 'Update' : 'Add'}
           </button>
           {entry && (
-            <button onClick={deleteEntry} className="px-4 border border-red-300 text-red-500 hover:bg-red-50 rounded-lg py-2.5 text-sm">
+            <button onClick={deleteEntry} className="px-4 border border-red-500/30 text-red-400 hover:bg-red-500/10 rounded-xl py-2.5 text-sm transition-colors">
               Delete
             </button>
           )}
