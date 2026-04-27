@@ -97,19 +97,6 @@ export default function CalendarPage() {
       <div className="bg-zinc-900 border-b border-zinc-800 px-3 py-3 flex items-center gap-2 flex-shrink-0 z-30">
         <span className="flex-1 text-sm font-semibold text-zinc-100">{title()}</span>
         <button onClick={() => setCurrent(new Date())} className="text-xs text-green-400 font-medium border border-green-500/30 rounded-lg px-2 py-1 hover:bg-green-500/10 transition-colors">Today</button>
-        <div className="flex bg-zinc-800 rounded-lg p-0.5">
-          {(['month', 'week', 'day'] as ViewMode[]).map(v => (
-            <button
-              key={v}
-              onClick={() => setView(v)}
-              className={`px-2 py-1 text-xs font-medium rounded-md capitalize transition-colors ${
-                view === v ? 'bg-zinc-600 text-zinc-100' : 'text-zinc-500 hover:text-zinc-300'
-              }`}
-            >
-              {v}
-            </button>
-          ))}
-        </div>
       </div>
 
       {/* Calendar body */}
@@ -125,15 +112,27 @@ export default function CalendarPage() {
         )}
       </div>
 
-      {/* Bottom navigation arrows */}
-      <div className="bg-zinc-900 border-t border-zinc-800 flex items-center justify-between px-6 py-3 flex-shrink-0">
+      {/* Bottom navigation arrows + view toggle */}
+      <div className="bg-zinc-900 border-t border-zinc-800 flex items-center justify-between px-4 py-3 flex-shrink-0">
         <button
           onClick={() => navigate(-1)}
           className="w-14 h-14 flex items-center justify-center rounded-2xl bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-3xl font-light transition-colors"
         >
           ‹
         </button>
-        <span className="text-xs text-zinc-600 capitalize">{view}</span>
+        <div className="flex bg-zinc-800 rounded-xl p-1 gap-1">
+          {(['month', 'week', 'day'] as ViewMode[]).map(v => (
+            <button
+              key={v}
+              onClick={() => setView(v)}
+              className={`px-3 py-2 text-sm font-medium rounded-lg capitalize transition-colors ${
+                view === v ? 'bg-zinc-600 text-zinc-100' : 'text-zinc-500 hover:text-zinc-300'
+              }`}
+            >
+              {v}
+            </button>
+          ))}
+        </div>
         <button
           onClick={() => navigate(1)}
           className="w-14 h-14 flex items-center justify-center rounded-2xl bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-3xl font-light transition-colors"
