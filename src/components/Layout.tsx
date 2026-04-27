@@ -34,11 +34,11 @@ export default function Layout() {
         )}
       </header>
 
-      <main className="flex-1 overflow-y-auto pb-16 min-h-0">
+      <main className="flex-1 overflow-y-auto min-h-0 main-content">
         <Outlet />
       </main>
 
-      <nav className="fixed bottom-0 left-0 right-0 bg-zinc-900 border-t border-zinc-800 flex z-40">
+      <nav className="fixed bottom-0 left-0 right-0 bg-zinc-900 border-t border-zinc-800 flex z-40 bottom-nav">
         {nav.map(({ to, label, icon }) => (
           <NavLink
             key={to}

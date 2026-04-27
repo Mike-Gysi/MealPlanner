@@ -11,6 +11,16 @@ input, select, textarea {
   font-size: 16px !important;
 }
 
+/* iPhone safe area — push nav above home indicator */
+.bottom-nav {
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+/* Compensate main content for taller nav on iPhone */
+.main-content {
+  padding-bottom: calc(4rem + env(safe-area-inset-bottom));
+}
+
 .fc .fc-button {
   background-color: #22c55e !important;
   border-color: #22c55e !important;
