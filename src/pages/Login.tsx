@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabase'
 export default function Login() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [username, setUsername] = useState('')
   const [mode, setMode] = useState<'signin' | 'signup'>('signin')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
@@ -18,23 +19,42 @@ export default function Login() {
       const { error } = await supabase.auth.signInWithPassword({ email, password })
       if (error) setError(error.message)
     } else {
-      const { error } = await supabase.auth.signUp({ email, password })
+      const { error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: { data: { username: username.trim() } },
+      })
       if (error) setError(error.message)
       else setMessage('Check your email to confirm your account.')
     }
     setLoading(false)
   }
 
+  const inputClass = "w-full bg-zinc-800 border border-zinc-700 rounded-xl px-3 py-2.5 text-sm text-zinc-100 placeholder-zinc-600 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all"
+
   return (
     <div className="min-h-screen bg-zinc-950 flex items-center justify-center px-4">
       <div className="w-full max-w-sm">
         <div className="mb-8 text-center">
-          <h1 className="text-3xl font-bold text-green-400 tracking-tight mb-1">MealPlanner</h1>
+          <h1 className="text-3xl font-bold text-green-400 tracking-tight mb-1">🐝 The Bee Hive</h1>
           <p className="text-zinc-500 text-sm">Plan your week, together.</p>
         </div>
 
         <div className="bg-zinc-900 rounded-2xl border border-zinc-800 p-6">
           <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+            {mode === 'signup' && (
+              <div>
+                <label className="block text-xs font-medium text-zinc-400 mb-1.5 uppercase tracking-wide">Username</label>
+                <input
+                  type="text"
+                  required
+                  value={username}
+                  onChange={e => setUsername(e.target.value)}
+                  placeholder="e.g. Mike"
+                  className={inputClass}
+                />
+              </div>
+            )}
             <div>
               <label className="block text-xs font-medium text-zinc-400 mb-1.5 uppercase tracking-wide">Email</label>
               <input
@@ -42,7 +62,7 @@ export default function Login() {
                 required
                 value={email}
                 onChange={e => setEmail(e.target.value)}
-                className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-3 py-2.5 text-sm text-zinc-100 placeholder-zinc-600 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all"
+                className={inputClass}
               />
             </div>
             <div>
@@ -52,7 +72,7 @@ export default function Login() {
                 required
                 value={password}
                 onChange={e => setPassword(e.target.value)}
-                className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-3 py-2.5 text-sm text-zinc-100 placeholder-zinc-600 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all"
+                className={inputClass}
               />
             </div>
 

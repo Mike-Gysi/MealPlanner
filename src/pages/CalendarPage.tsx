@@ -93,11 +93,9 @@ export default function CalendarPage() {
 
   return (
     <div className="flex flex-col h-full min-h-0">
-      {/* Header */}
+      {/* Header — title + view toggle */}
       <div className="bg-zinc-900 border-b border-zinc-800 px-3 py-3 flex items-center gap-2 flex-shrink-0 z-30">
-        <button onClick={() => navigate(-1)} className="p-1.5 rounded-lg hover:bg-zinc-800 text-zinc-400 text-lg transition-colors">‹</button>
-        <button onClick={() => navigate(1)} className="p-1.5 rounded-lg hover:bg-zinc-800 text-zinc-400 text-lg transition-colors">›</button>
-        <span className="flex-1 text-sm font-semibold text-zinc-100 text-center">{title()}</span>
+        <span className="flex-1 text-sm font-semibold text-zinc-100">{title()}</span>
         <button onClick={() => setCurrent(new Date())} className="text-xs text-green-400 font-medium border border-green-500/30 rounded-lg px-2 py-1 hover:bg-green-500/10 transition-colors">Today</button>
         <div className="flex bg-zinc-800 rounded-lg p-0.5">
           {(['month', 'week', 'day'] as ViewMode[]).map(v => (
@@ -127,6 +125,23 @@ export default function CalendarPage() {
         )}
       </div>
 
+      {/* Bottom navigation arrows */}
+      <div className="bg-zinc-900 border-t border-zinc-800 flex items-center justify-between px-6 py-3 flex-shrink-0">
+        <button
+          onClick={() => navigate(-1)}
+          className="w-14 h-14 flex items-center justify-center rounded-2xl bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-3xl font-light transition-colors"
+        >
+          ‹
+        </button>
+        <span className="text-xs text-zinc-600 capitalize">{view}</span>
+        <button
+          onClick={() => navigate(1)}
+          className="w-14 h-14 flex items-center justify-center rounded-2xl bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-3xl font-light transition-colors"
+        >
+          ›
+        </button>
+      </div>
+
       {modal && (
         <MealModal
           date={modal.date}
@@ -144,11 +159,6 @@ export default function CalendarPage() {
 
 // ── Month View ──────────────────────────────────────────────────────────────
 
-const DOT_COLORS: Record<MealType, string> = {
-  breakfast: 'bg-amber-500',
-  lunch: 'bg-blue-500',
-  dinner: 'bg-violet-500',
-}
 
 interface MonthWeekProps {
   days: Date[]
@@ -171,23 +181,26 @@ function MonthView({ days, current, getEntry, openDay }: MonthWeekProps) {
         {days.map(day => {
           const inMonth = current ? isSameMonth(day, current) : true
           const today = isToday(day)
-          const dots = MEAL_TYPES.filter(m => getEntry(day, m))
+          const meals = MEAL_TYPES.map(m => ({ meal: m, entry: getEntry(day, m) })).filter(x => x.entry)
           return (
             <button
               key={day.toISOString()}
               onClick={() => openDay(day)}
-              className={`border-b border-r border-zinc-800 p-1 flex flex-col items-center justify-start gap-1 transition-colors hover:bg-zinc-800/50 ${!inMonth ? 'opacity-30' : ''}`}
+              className={`border-b border-r border-zinc-800 p-1 flex flex-col items-start justify-start gap-0.5 transition-colors hover:bg-zinc-800/50 ${!inMonth ? 'opacity-30' : ''}`}
             >
-              <div className={`text-xs font-medium w-6 h-6 flex items-center justify-center rounded-full ${
+              <div className={`text-xs font-medium w-5 h-5 flex items-center justify-center rounded-full mb-0.5 ${
                 today ? 'bg-green-500 text-zinc-950 font-bold' : 'text-zinc-300'
               }`}>
                 {format(day, 'd')}
               </div>
-              {dots.length > 0 && (
-                <div className="flex gap-0.5">
-                  {dots.map(m => <span key={m} className={`w-1.5 h-1.5 rounded-full ${DOT_COLORS[m]}`} />)}
-                </div>
-              )}
+              {meals.map(({ meal, entry }) => {
+                const label = entry?.recipe?.name ?? entry?.custom_text ?? ''
+                return (
+                  <span key={meal} className={`w-full truncate rounded px-1 py-0.5 text-[9px] font-medium leading-tight text-white ${MEAL_COLORS[meal]}`}>
+                    {label}
+                  </span>
+                )
+              })}
             </button>
           )
         })}
@@ -203,12 +216,12 @@ function WeekView({ days, getEntry, openDay }: MonthWeekProps) {
     <div className="grid grid-cols-7 divide-x divide-zinc-800 flex-1 min-h-0">
       {days.map(day => {
         const today = isToday(day)
-        const dots = MEAL_TYPES.filter(m => getEntry(day, m))
+        const meals = MEAL_TYPES.map(m => ({ meal: m, entry: getEntry(day, m) })).filter(x => x.entry)
         return (
           <button
             key={day.toISOString()}
             onClick={() => openDay(day)}
-            className="flex flex-col items-center justify-start pt-4 gap-2 hover:bg-zinc-800/50 transition-colors"
+            className="flex flex-col items-center justify-start pt-3 pb-2 px-1 gap-2 hover:bg-zinc-800/50 transition-colors"
           >
             <div className={`text-xs font-medium ${today ? 'text-green-400' : 'text-zinc-500'}`}>
               {format(day, 'EEE')}
@@ -218,11 +231,16 @@ function WeekView({ days, getEntry, openDay }: MonthWeekProps) {
             }`}>
               {format(day, 'd')}
             </div>
-            {dots.length > 0 && (
-              <div className="flex flex-col gap-1">
-                {dots.map(m => <span key={m} className={`w-2 h-2 rounded-full ${DOT_COLORS[m]}`} />)}
-              </div>
-            )}
+            <div className="flex flex-col gap-1 w-full">
+              {meals.map(({ meal, entry }) => {
+                const label = entry?.recipe?.name ?? entry?.custom_text ?? ''
+                return (
+                  <span key={meal} className={`w-full truncate rounded-md px-1 py-1 text-[10px] font-medium leading-tight text-white text-center ${MEAL_COLORS[meal]}`}>
+                    {label}
+                  </span>
+                )
+              })}
+            </div>
           </button>
         )
       })}

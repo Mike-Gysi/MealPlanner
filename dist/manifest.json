@@ -1,6 +1,6 @@
 {
-  "name": "MealPlanner",
-  "short_name": "MealPlanner",
+  "name": "The Bee Hive",
+  "short_name": "Bee Hive",
   "description": "Plan your meals and shopping together",
   "start_url": "/",
   "display": "standalone",

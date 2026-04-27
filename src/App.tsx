@@ -7,6 +7,7 @@ import Login from './pages/Login'
 import CalendarPage from './pages/CalendarPage'
 import ShoppingList from './pages/ShoppingList'
 import Recipes from './pages/Recipes'
+import Settings from './pages/Settings'
 
 export default function App() {
   const [session, setSession] = useState<Session | null | undefined>(undefined)
@@ -39,6 +40,7 @@ export default function App() {
             <Route path="/calendar" element={<CalendarPage />} />
             <Route path="/shopping" element={<ShoppingList />} />
             <Route path="/recipes" element={<Recipes />} />
+            <Route path="/settings" element={<Settings />} />
             <Route path="*" element={<Navigate to="/calendar" replace />} />
           </Route>
         )}
