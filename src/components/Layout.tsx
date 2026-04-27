@@ -5,6 +5,7 @@ import { supabase } from '../lib/supabase'
 const nav = [
   { to: '/calendar', label: 'Calendar', icon: '📅' },
   { to: '/shopping', label: 'Shopping', icon: '🛒' },
+  { to: '/todos', label: 'Todos', icon: '✅' },
   { to: '/recipes', label: 'Recipes', icon: '🍽️' },
   { to: '/settings', label: 'Settings', icon: '⚙️' },
 ]

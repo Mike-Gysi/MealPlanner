@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import {
   format, startOfMonth, endOfMonth, startOfWeek, endOfWeek,
   eachDayOfInterval, addMonths, addWeeks, addDays,
-  isSameMonth, isToday,
+  isSameMonth, isToday, subDays,
 } from 'date-fns'
 import { supabase } from '../lib/supabase'
 import type { CalendarEntry, Recipe } from '../types'
@@ -318,7 +318,10 @@ function MealModal({ date, meal, entry, recipes, allEntries, onClose, onSaved }:
   const [addToShopping, setAddToShopping] = useState(false)
   const [saving, setSaving] = useState(false)
 
-  const otherEntries = allEntries.filter(e => e.id !== entry?.id)
+  const threeDaysAgo = subDays(new Date(), 3)
+  const otherEntries = allEntries.filter(e =>
+    e.id !== entry?.id && new Date(e.date + 'T12:00:00') >= threeDaysAgo
+  )
 
   async function save() {
     setSaving(true)

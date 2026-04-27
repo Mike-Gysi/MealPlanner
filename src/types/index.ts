@@ -39,3 +39,22 @@ export interface ShoppingHistoryItem {
   unit: string | null
   purchased_at: string
 }
+
+export interface Profile {
+  id: string
+  username: string
+}
+
+export interface Todo {
+  id: string
+  name: string
+  due_date: string
+  assigned_to: string
+  completed: boolean
+  created_at: string
+  recurring: boolean
+  recur_type: 'daily' | 'weekly' | 'monthly' | null
+  recur_interval: number | null
+  recur_week_position: 'start' | 'middle' | 'end' | null
+  recur_month_day: number | null
+}

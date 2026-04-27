@@ -18,7 +18,15 @@ export default function ShoppingList() {
   const [tab, setTab] = useState<'list' | 'history'>('list')
   const [loading, setLoading] = useState(true)
 
-  useEffect(() => { fetchAll() }, [])
+  useEffect(() => {
+    fetchAll()
+    // Real-time sync: refetch whenever any other user changes the shopping tables
+    const channel = supabase.channel('shopping-sync')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'shopping_list_items' }, fetchAll)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'shopping_list_history' }, fetchAll)
+      .subscribe()
+    return () => { supabase.removeChannel(channel) }
+  }, [])
 
   async function fetchAll() {
     setLoading(true)

@@ -24,9 +24,12 @@ export default function Settings() {
     setSaving(true)
     setMessage('')
     setError('')
-    const { error } = await supabase.auth.updateUser({
+    const { data: userData, error } = await supabase.auth.updateUser({
       data: { username: username.trim() },
     })
+    if (!error && userData.user) {
+      await supabase.from('profiles').upsert({ id: userData.user.id, username: username.trim() }, { onConflict: 'id' })
+    }
     if (error) {
       setError(error.message)
     } else {
