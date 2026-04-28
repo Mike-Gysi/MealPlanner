@@ -43,6 +43,7 @@ export default function CalendarPage() {
   const [profiles, setProfiles] = useState<Profile[]>([])
   const [selectedUser, setSelectedUser] = useState<string>('all')
   const [modal, setModal] = useState<{ date: string; meal: MealType; entry: CalendarEntry | null } | null>(null)
+  const [todoPopup, setTodoPopup] = useState<{ type: 'day'; date: Date; todos: Todo[] } | { type: 'todo'; todo: Todo } | null>(null)
 
   useEffect(() => { fetchEntries(); fetchRecipes(); fetchTodosAndProfiles() }, [])
 
@@ -188,9 +189,9 @@ export default function CalendarPage() {
           </>
         ) : (
           <>
-            {view === 'month' && <TodoMonthView days={days} current={current} getTodos={getTodosForDate} profiles={profiles} openDay={openDay} />}
-            {view === 'week' && <TodoWeekView days={days} getTodos={getTodosForDate} profiles={profiles} openDay={openDay} />}
-            {view === 'day' && <TodoDayView day={current} getTodos={getTodosForDate} profiles={profiles} />}
+            {view === 'month' && <TodoMonthView days={days} current={current} getTodos={getTodosForDate} profiles={profiles} openDay={d => setTodoPopup({ type: 'day', date: d, todos: getTodosForDate(d) })} onTodoClick={t => setTodoPopup({ type: 'todo', todo: t })} />}
+            {view === 'week' && <TodoWeekView days={days} getTodos={getTodosForDate} profiles={profiles} openDay={d => setTodoPopup({ type: 'day', date: d, todos: getTodosForDate(d) })} onTodoClick={t => setTodoPopup({ type: 'todo', todo: t })} />}
+            {view === 'day' && <TodoDayView day={current} getTodos={getTodosForDate} profiles={profiles} onTodoClick={t => setTodoPopup({ type: 'todo', todo: t })} />}
           </>
         )}
       </div>
@@ -223,6 +224,10 @@ export default function CalendarPage() {
           ›
         </button>
       </div>
+
+      {todoPopup && (
+        <TodoPopup popup={todoPopup} profiles={profiles} onClose={() => setTodoPopup(null)} />
+      )}
 
       {modal && (
         <MealModal
@@ -409,9 +414,10 @@ interface TodoViewProps {
   getTodos: (date: Date) => Todo[]
   profiles: Profile[]
   openDay: (date: Date) => void
+  onTodoClick: (todo: Todo) => void
 }
 
-function TodoMonthView({ days, current, getTodos, profiles, openDay }: TodoViewProps) {
+function TodoMonthView({ days, current, getTodos, profiles, openDay, onTodoClick }: TodoViewProps) {
   const weekDays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
   const numWeeks = days.length / 7
   return (
@@ -443,7 +449,8 @@ function TodoMonthView({ days, current, getTodos, profiles, openDay }: TodoViewP
                 return (
                   <span
                     key={todo.id}
-                    className="w-full truncate rounded px-1 py-0.5 text-[9px] font-medium leading-tight text-white"
+                    onClick={e => { e.stopPropagation(); onTodoClick(todo) }}
+                    className="w-full truncate rounded px-1 py-0.5 text-[9px] font-medium leading-tight text-white cursor-pointer"
                     style={{ backgroundColor: color }}
                   >
                     {todo.name}
@@ -460,7 +467,7 @@ function TodoMonthView({ days, current, getTodos, profiles, openDay }: TodoViewP
 
 // ── Todo Week View ──────────────────────────────────────────────────────────
 
-function TodoWeekView({ days, getTodos, profiles, openDay }: Omit<TodoViewProps, 'current'>) {
+function TodoWeekView({ days, getTodos, profiles, openDay, onTodoClick }: Omit<TodoViewProps, 'current'>) {
   return (
     <div className="flex flex-col flex-1 min-h-0">
       {/* Day headers */}
@@ -501,14 +508,15 @@ function TodoWeekView({ days, getTodos, profiles, openDay }: Omit<TodoViewProps,
                   const overdue = isPast(parseISO(todo.due_date)) && !isToday(day)
                   const color = overdue ? '#ef4444' : getProfileColor(todo.assigned_to, profiles)
                   return (
-                    <div
+                    <button
                       key={todo.id}
-                      className="rounded px-1 py-0.5 text-[10px] font-medium leading-tight text-white truncate"
+                      onClick={e => { e.stopPropagation(); onTodoClick(todo) }}
+                      className="w-full text-left rounded px-1 py-0.5 text-[10px] font-medium leading-tight text-white truncate"
                       style={{ backgroundColor: color }}
                       title={todo.name}
                     >
                       {todo.name}
-                    </div>
+                    </button>
                   )
                 })
               )}
@@ -522,7 +530,7 @@ function TodoWeekView({ days, getTodos, profiles, openDay }: Omit<TodoViewProps,
 
 // ── Todo Day View ───────────────────────────────────────────────────────────
 
-function TodoDayView({ day, getTodos, profiles }: { day: Date; getTodos: (date: Date) => Todo[]; profiles: Profile[] }) {
+function TodoDayView({ day, getTodos, profiles, onTodoClick }: { day: Date; getTodos: (date: Date) => Todo[]; profiles: Profile[]; onTodoClick: (todo: Todo) => void }) {
   const dayTodos = getTodos(day)
   return (
     <div className="max-w-lg mx-auto px-4 py-4 flex flex-col gap-3 overflow-y-auto">
@@ -533,17 +541,117 @@ function TodoDayView({ day, getTodos, profiles }: { day: Date; getTodos: (date: 
           const overdue = isPast(parseISO(todo.due_date)) && !isToday(day)
           const color = overdue ? '#ef4444' : getProfileColor(todo.assigned_to, profiles)
           return (
-            <div key={todo.id} className="rounded-2xl p-4" style={{ backgroundColor: color }}>
+            <button key={todo.id} onClick={() => onTodoClick(todo)} className="w-full text-left rounded-2xl p-4" style={{ backgroundColor: color }}>
               <p className="font-semibold text-sm text-white">{todo.name}</p>
               <p className="text-xs mt-1 text-white/70">
                 {todo.assigned_to === 'all' ? 'Everyone' : todo.assigned_to}
                 {todo.recurring && ' · Recurring'}
                 {overdue && ' · Overdue'}
               </p>
-            </div>
+            </button>
           )
         })
       )}
+    </div>
+  )
+}
+
+// ── Todo Popup ──────────────────────────────────────────────────────────────
+
+function todoRecurLabel(todo: Todo): string {
+  if (!todo.recurring || !todo.recur_type) return ''
+  const n = todo.recur_interval ?? 1
+  if (todo.recur_type === 'daily') return n === 1 ? 'Every day' : `Every ${n} days`
+  if (todo.recur_type === 'weekly') return n === 1 ? 'Weekly' : `Every ${n} weeks`
+  if (todo.recur_type === 'monthly') return n === 1 ? 'Monthly' : `Every ${n} months`
+  return ''
+}
+
+function TodoPopup({
+  popup,
+  profiles,
+  onClose,
+}: {
+  popup: { type: 'day'; date: Date; todos: Todo[] } | { type: 'todo'; todo: Todo }
+  profiles: Profile[]
+  onClose: () => void
+}) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4" onClick={onClose}>
+      <div className="bg-zinc-900 border border-zinc-700 w-full max-w-sm rounded-2xl shadow-2xl" onClick={e => e.stopPropagation()}>
+        {popup.type === 'day' ? (
+          <>
+            <div className="flex items-center justify-between px-5 py-4 border-b border-zinc-800">
+              <h3 className="font-semibold text-zinc-100">
+                {format(popup.date, 'EEE d MMM')} — Todos
+              </h3>
+              <button onClick={onClose} className="text-zinc-600 hover:text-zinc-300 text-2xl leading-none">×</button>
+            </div>
+            <div className="p-4 flex flex-col gap-2 max-h-80 overflow-y-auto">
+              {popup.todos.length === 0 ? (
+                <p className="text-center text-zinc-600 text-sm py-4">No todos for this day.</p>
+              ) : (
+                popup.todos.map(todo => {
+                  const overdue = isPast(parseISO(todo.due_date)) && !isToday(popup.date)
+                  const color = overdue ? '#ef4444' : getProfileColor(todo.assigned_to, profiles)
+                  return (
+                    <div key={todo.id} className="flex items-center gap-3 rounded-xl px-3 py-2.5 border-l-4" style={{ backgroundColor: color + '18', borderColor: color }}>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-zinc-100">{todo.name}</p>
+                        <p className="text-xs text-zinc-400 mt-0.5">
+                          {todo.assigned_to === 'all' ? 'Everyone' : todo.assigned_to}
+                          {overdue && ' · Overdue'}
+                        </p>
+                      </div>
+                      <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: color }} />
+                    </div>
+                  )
+                })
+              )}
+            </div>
+          </>
+        ) : (
+          <>
+            <div className="flex items-center justify-between px-5 py-4 border-b border-zinc-800">
+              <h3 className="font-semibold text-zinc-100 pr-4 leading-snug">{popup.todo.name}</h3>
+              <button onClick={onClose} className="text-zinc-600 hover:text-zinc-300 text-2xl leading-none flex-shrink-0">×</button>
+            </div>
+            <div className="p-5 flex flex-col gap-4">
+              <div className="flex items-center gap-3">
+                <div
+                  className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0"
+                  style={{ backgroundColor: getProfileColor(popup.todo.assigned_to, profiles) }}
+                >
+                  <span className="text-white text-sm font-bold">
+                    {popup.todo.assigned_to === 'all' ? '★' : popup.todo.assigned_to[0].toUpperCase()}
+                  </span>
+                </div>
+                <div>
+                  <p className="text-[10px] text-zinc-500 uppercase tracking-wide">Assigned to</p>
+                  <p className="text-sm text-zinc-200 font-medium">
+                    {popup.todo.assigned_to === 'all' ? 'Everyone' : popup.todo.assigned_to}
+                  </p>
+                </div>
+              </div>
+
+              <div>
+                <p className="text-[10px] text-zinc-500 uppercase tracking-wide mb-1">Due date</p>
+                <p className="text-sm text-zinc-200">{format(parseISO(popup.todo.due_date), 'EEEE, d MMMM yyyy')}</p>
+                {isPast(parseISO(popup.todo.due_date)) && !isToday(parseISO(popup.todo.due_date)) && (
+                  <p className="text-xs text-red-400 mt-0.5">Overdue</p>
+                )}
+              </div>
+
+              {popup.todo.recurring && (
+                <div>
+                  <p className="text-[10px] text-zinc-500 uppercase tracking-wide mb-1">Recurring</p>
+                  <p className="text-sm text-green-400">↻ {todoRecurLabel(popup.todo)}</p>
+                </div>
+              )}
+            </div>
+          </>
+        )}
+      </div>
     </div>
   )
 }
