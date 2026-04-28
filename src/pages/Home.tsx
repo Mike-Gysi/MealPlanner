@@ -35,12 +35,11 @@ export default function Home() {
     <>
     <style>{`
       @keyframes bee-fly-in {
-        0%   { transform: translate(110px, 190px) rotate(28deg) scale(2.4); opacity: 0; }
-        8%   { opacity: 1; }
-        25%  { transform: translate(-95px, 115px) rotate(-24deg) scale(2.1); }
-        45%  { transform: translate(70px, -80px) rotate(16deg) scale(1.9); }
-        65%  { transform: translate(-50px, -40px) rotate(-14deg) scale(1.6); }
-        82%  { transform: translate(28px, 48px) rotate(8deg) scale(1.3); }
+        0%   { transform: translate(140px, -60px) rotate(-25deg) scale(2); opacity: 0; }
+        10%  { opacity: 1; }
+        35%  { transform: translate(80px, 70px) rotate(18deg) scale(1.7); }
+        60%  { transform: translate(20px, 100px) rotate(-10deg) scale(1.4); }
+        80%  { transform: translate(-15px, 30px) rotate(6deg) scale(1.2); }
         100% { transform: translate(0, 0) rotate(0deg) scale(1); opacity: 1; }
       }
     `}</style>
