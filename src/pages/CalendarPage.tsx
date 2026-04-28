@@ -6,7 +6,7 @@ import {
 } from 'date-fns'
 import { supabase } from '../lib/supabase'
 import { logActivity } from '../lib/activity'
-import type { CalendarEntry, Recipe, Todo, Profile } from '../types'
+import type { CalendarEntry, Recipe, RecipeIngredient, Todo, Profile } from '../types'
 
 const MEAL_TYPES = ['breakfast', 'lunch', 'dinner'] as const
 type MealType = typeof MEAL_TYPES[number]
@@ -686,6 +686,8 @@ function MealModal({ date, meal, entry, recipes, allEntries, onClose, onSaved }:
   }
   const [addToShopping, setAddToShopping] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [showIngredientPicker, setShowIngredientPicker] = useState(false)
+  const [checkedIngredients, setCheckedIngredients] = useState<Set<string>>(new Set())
 
   const threeDaysAgo = subDays(new Date(), 3)
   const otherEntries = allEntries.filter(e =>
@@ -711,10 +713,33 @@ function MealModal({ date, meal, entry, recipes, allEntries, onClose, onSaved }:
       await supabase.from('calendar_entries').insert(payload)
       logActivity('planned meal', 'calendar', `${selectedMeal} — ${mealName}`)
     }
-    if (addToShopping && mode === 'recipe' && recipeId) {
-      await mergeIngredientsToShoppingList(recipeId, recipes)
-    }
     setSaving(false)
+    if (addToShopping && mode === 'recipe' && recipeId) {
+      const recipe = recipes.find(r => r.id === recipeId)
+      if (recipe?.ingredients?.length) {
+        setCheckedIngredients(new Set(recipe.ingredients.map(i => i.id)))
+        setShowIngredientPicker(true)
+        return
+      }
+    }
+    onSaved()
+  }
+
+  function toggleIngredient(id: string) {
+    setCheckedIngredients(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  async function confirmIngredients() {
+    const recipe = recipes.find(r => r.id === recipeId)
+    if (recipe?.ingredients) {
+      const filtered = recipe.ingredients.filter(i => checkedIngredients.has(i.id))
+      if (filtered.length) await mergeIngredientsToShoppingList(filtered)
+    }
     onSaved()
   }
 
@@ -823,19 +848,57 @@ function MealModal({ date, meal, entry, recipes, allEntries, onClose, onSaved }:
           )}
         </div>
       </div>
+
+      {showIngredientPicker && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 px-4">
+          <div className="bg-zinc-900 border border-zinc-700 w-full max-w-sm rounded-2xl p-6 shadow-2xl">
+            <h3 className="font-semibold text-zinc-100 mb-1">Add to shopping list</h3>
+            <p className="text-xs text-zinc-500 mb-4">Uncheck ingredients you already have at home</p>
+            <div className="space-y-2 max-h-72 overflow-y-auto mb-5 pr-1">
+              {recipes.find(r => r.id === recipeId)?.ingredients?.map(ing => (
+                <label key={ing.id} className="flex items-center gap-3 text-sm text-zinc-200 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={checkedIngredients.has(ing.id)}
+                    onChange={() => toggleIngredient(ing.id)}
+                    className="rounded accent-green-500 shrink-0"
+                  />
+                  <span>
+                    {ing.quantity != null ? `${ing.quantity}${ing.unit ? ` ${ing.unit}` : ''} ` : ''}{ing.name}
+                  </span>
+                </label>
+              ))}
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={confirmIngredients}
+                disabled={checkedIngredients.size === 0}
+                className="flex-1 bg-green-500 hover:bg-green-400 text-zinc-950 rounded-xl py-2.5 text-sm font-bold disabled:opacity-30 transition-colors"
+              >
+                Add {checkedIngredients.size} item{checkedIngredients.size !== 1 ? 's' : ''} to list
+              </button>
+              <button
+                onClick={onSaved}
+                className="px-4 text-zinc-400 hover:text-zinc-200 text-sm transition-colors"
+              >
+                Skip
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
 
-async function mergeIngredientsToShoppingList(recipeId: string, recipes: Recipe[]) {
-  const recipe = recipes.find(r => r.id === recipeId)
-  if (!recipe?.ingredients?.length) return
+async function mergeIngredientsToShoppingList(ingredients: RecipeIngredient[]) {
+  if (!ingredients.length) return
   const { data: existing } = await supabase.from('shopping_list_items').select('*').eq('is_purchased', false)
   const existingMap = new Map<string, { id: string; quantity: number | null }>()
   for (const item of existing ?? []) {
     existingMap.set(`${item.name.toLowerCase()}|${item.unit ?? ''}`, item)
   }
-  for (const ing of recipe.ingredients) {
+  for (const ing of ingredients) {
     const key = `${ing.name.toLowerCase()}|${ing.unit ?? ''}`
     const match = existingMap.get(key)
     if (match) {
