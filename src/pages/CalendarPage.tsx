@@ -2,11 +2,11 @@ import { useEffect, useState } from 'react'
 import {
   format, startOfMonth, endOfMonth, startOfWeek, endOfWeek,
   eachDayOfInterval, addMonths, addWeeks, addDays,
-  isSameMonth, isToday, subDays,
+  isSameMonth, isToday, isPast, parseISO, subDays,
 } from 'date-fns'
 import { supabase } from '../lib/supabase'
 import { logActivity } from '../lib/activity'
-import type { CalendarEntry, Recipe } from '../types'
+import type { CalendarEntry, Recipe, Todo, Profile } from '../types'
 
 const MEAL_TYPES = ['breakfast', 'lunch', 'dinner'] as const
 type MealType = typeof MEAL_TYPES[number]
@@ -25,14 +25,26 @@ const MEAL_BTN_ACTIVE: Record<MealType, string> = {
 
 type ViewMode = 'month' | 'week' | 'day'
 
+const PROFILE_COLORS = ['#3b82f6', '#a855f7', '#f97316', '#ec4899', '#14b8a6', '#ef4444', '#eab308', '#06b6d4']
+
+function getProfileColor(username: string, profiles: Profile[]): string {
+  if (username === 'all') return '#22c55e'
+  const idx = profiles.findIndex(p => p.username === username)
+  return PROFILE_COLORS[Math.max(0, idx) % PROFILE_COLORS.length]
+}
+
 export default function CalendarPage() {
   const [current, setCurrent] = useState(new Date())
   const [view, setView] = useState<ViewMode>('week')
+  const [calMode, setCalMode] = useState<'meals' | 'todos'>('meals')
   const [entries, setEntries] = useState<CalendarEntry[]>([])
   const [recipes, setRecipes] = useState<Recipe[]>([])
+  const [todos, setTodos] = useState<Todo[]>([])
+  const [profiles, setProfiles] = useState<Profile[]>([])
+  const [selectedUser, setSelectedUser] = useState<string>('all')
   const [modal, setModal] = useState<{ date: string; meal: MealType; entry: CalendarEntry | null } | null>(null)
 
-  useEffect(() => { fetchEntries(); fetchRecipes() }, [])
+  useEffect(() => { fetchEntries(); fetchRecipes(); fetchTodosAndProfiles() }, [])
 
   async function fetchEntries() {
     const { data } = await supabase
@@ -46,9 +58,26 @@ export default function CalendarPage() {
     setRecipes(data ?? [])
   }
 
+  async function fetchTodosAndProfiles() {
+    const [{ data: todosData }, { data: profilesData }] = await Promise.all([
+      supabase.from('todos').select('*').eq('completed', false).order('due_date'),
+      supabase.from('profiles').select('*'),
+    ])
+    setTodos(todosData ?? [])
+    setProfiles(profilesData ?? [])
+  }
+
   function getEntry(date: Date, meal: MealType): CalendarEntry | null {
     const d = format(date, 'yyyy-MM-dd')
     return entries.find(e => e.date === d && e.meal_type === meal) ?? null
+  }
+
+  function getTodosForDate(date: Date): Todo[] {
+    const d = format(date, 'yyyy-MM-dd')
+    const filtered = selectedUser === 'all'
+      ? todos
+      : todos.filter(t => t.assigned_to === selectedUser || t.assigned_to === 'all')
+    return filtered.filter(t => t.due_date === d)
   }
 
   function openSlot(date: Date, meal: MealType) {
@@ -94,22 +123,75 @@ export default function CalendarPage() {
 
   return (
     <div className="flex flex-col h-full min-h-0">
-      {/* Header — title + view toggle */}
-      <div className="bg-zinc-900 border-b border-zinc-800 px-3 py-3 flex items-center gap-2 flex-shrink-0 z-30">
-        <span className="flex-1 text-sm font-semibold text-zinc-100">{title()}</span>
-        <button onClick={() => setCurrent(new Date())} className="text-xs text-green-400 font-medium border border-green-500/30 rounded-lg px-2 py-1 hover:bg-green-500/10 transition-colors">Today</button>
+      {/* Header */}
+      <div className="bg-zinc-900 border-b border-zinc-800 px-3 pt-3 pb-2 flex flex-col gap-2 flex-shrink-0 z-30">
+        <div className="flex items-center gap-2">
+          <span className="flex-1 text-sm font-semibold text-zinc-100">{title()}</span>
+          <button onClick={() => setCurrent(new Date())} className="text-xs text-green-400 font-medium border border-green-500/30 rounded-lg px-2 py-1 hover:bg-green-500/10 transition-colors">Today</button>
+        </div>
+
+        {/* Mode toggle */}
+        <div className="flex gap-1 bg-zinc-800 rounded-xl p-1">
+          <button
+            onClick={() => setCalMode('meals')}
+            className={`flex-1 py-1.5 text-xs font-medium rounded-lg transition-colors ${calMode === 'meals' ? 'bg-zinc-700 text-zinc-100' : 'text-zinc-500 hover:text-zinc-300'}`}
+          >
+            Meal Planning
+          </button>
+          <button
+            onClick={() => setCalMode('todos')}
+            className={`flex-1 py-1.5 text-xs font-medium rounded-lg transition-colors ${calMode === 'todos' ? 'bg-zinc-700 text-zinc-100' : 'text-zinc-500 hover:text-zinc-300'}`}
+          >
+            Todos
+          </button>
+        </div>
+
+        {/* User filter (todos mode only) */}
+        {calMode === 'todos' && profiles.length > 0 && (
+          <div className="flex gap-1.5 overflow-x-auto pb-1">
+            <button
+              onClick={() => setSelectedUser('all')}
+              className="flex-shrink-0 text-xs px-3 py-1 rounded-full font-medium transition-all border"
+              style={selectedUser === 'all'
+                ? { backgroundColor: '#22c55e', borderColor: '#22c55e', color: '#fff' }
+                : { borderColor: '#22c55e', color: '#22c55e' }}
+            >
+              Everyone
+            </button>
+            {profiles.map((p, i) => {
+              const color = PROFILE_COLORS[i % PROFILE_COLORS.length]
+              const active = selectedUser === p.username
+              return (
+                <button
+                  key={p.id}
+                  onClick={() => setSelectedUser(active ? 'all' : p.username)}
+                  className="flex-shrink-0 text-xs px-3 py-1 rounded-full font-medium transition-all border"
+                  style={active
+                    ? { backgroundColor: color, borderColor: color, color: '#fff' }
+                    : { borderColor: color, color: color }}
+                >
+                  {p.username}
+                </button>
+              )
+            })}
+          </div>
+        )}
       </div>
 
       {/* Calendar body */}
       <div className="flex-1 overflow-y-auto min-h-0 flex flex-col">
-        {view === 'month' && (
-          <MonthView days={days} current={current} getEntry={getEntry} openDay={openDay} />
-        )}
-        {view === 'week' && (
-          <WeekView days={days} getEntry={getEntry} openDay={openDay} openSlot={openSlot} />
-        )}
-        {view === 'day' && (
-          <DayView day={current} getEntry={getEntry} openSlot={openSlot} />
+        {calMode === 'meals' ? (
+          <>
+            {view === 'month' && <MonthView days={days} current={current} getEntry={getEntry} openDay={openDay} />}
+            {view === 'week' && <WeekView days={days} getEntry={getEntry} openDay={openDay} openSlot={openSlot} />}
+            {view === 'day' && <DayView day={current} getEntry={getEntry} openSlot={openSlot} />}
+          </>
+        ) : (
+          <>
+            {view === 'month' && <TodoMonthView days={days} current={current} getTodos={getTodosForDate} profiles={profiles} openDay={openDay} />}
+            {view === 'week' && <TodoWeekView days={days} getTodos={getTodosForDate} profiles={profiles} openDay={openDay} />}
+            {view === 'day' && <TodoDayView day={current} getTodos={getTodosForDate} profiles={profiles} />}
+          </>
         )}
       </div>
 
@@ -158,7 +240,6 @@ export default function CalendarPage() {
 }
 
 // ── Month View ──────────────────────────────────────────────────────────────
-
 
 interface MonthWeekProps {
   days: Date[]
@@ -214,37 +295,34 @@ function MonthView({ days, current, getEntry, openDay }: MonthWeekProps) {
 function WeekView({ days, getEntry, openDay, openSlot }: MonthWeekProps & { openSlot: (date: Date, meal: MealType) => void }) {
   return (
     <div className="flex flex-col flex-1 min-h-0">
-      {/* Day headers */}
       <div className="flex border-b border-zinc-800 flex-shrink-0">
         <div className="w-8 flex-shrink-0 border-r border-zinc-800" />
         <div className="flex-1 grid grid-cols-7 divide-x divide-zinc-800">
-        {days.map(day => {
-          const today = isToday(day)
-          return (
-            <button
-              key={day.toISOString()}
-              onClick={() => openDay(day)}
-              className="flex flex-col items-center py-3 gap-1 hover:bg-zinc-800/40 transition-colors"
-            >
-              <span className={`text-xs font-medium ${today ? 'text-green-400' : 'text-zinc-500'}`}>
-                {format(day, 'EEE')}
-              </span>
-              <span className={`w-8 h-8 flex items-center justify-center rounded-full text-sm font-semibold ${
-                today ? 'bg-green-500 text-zinc-950' : 'text-zinc-200'
-              }`}>
-                {format(day, 'd')}
-              </span>
-            </button>
-          )
-        })}
+          {days.map(day => {
+            const today = isToday(day)
+            return (
+              <button
+                key={day.toISOString()}
+                onClick={() => openDay(day)}
+                className="flex flex-col items-center py-3 gap-1 hover:bg-zinc-800/40 transition-colors"
+              >
+                <span className={`text-xs font-medium ${today ? 'text-green-400' : 'text-zinc-500'}`}>
+                  {format(day, 'EEE')}
+                </span>
+                <span className={`w-8 h-8 flex items-center justify-center rounded-full text-sm font-semibold ${
+                  today ? 'bg-green-500 text-zinc-950' : 'text-zinc-200'
+                }`}>
+                  {format(day, 'd')}
+                </span>
+              </button>
+            )
+          })}
         </div>
       </div>
 
-      {/* Meal rows — each takes equal vertical space */}
       <div className="flex-1 min-h-0 flex flex-col divide-y divide-zinc-800">
         {MEAL_TYPES.map(meal => (
           <div key={meal} className="flex flex-1 min-h-0">
-            {/* Meal label */}
             <div className="w-8 flex-shrink-0 flex items-center justify-center border-r border-zinc-800">
               <span className={`text-[9px] font-bold uppercase tracking-widest -rotate-90 whitespace-nowrap ${
                 meal === 'breakfast' ? 'text-amber-500' : meal === 'lunch' ? 'text-blue-400' : 'text-violet-400'
@@ -252,7 +330,6 @@ function WeekView({ days, getEntry, openDay, openSlot }: MonthWeekProps & { open
                 {meal}
               </span>
             </div>
-            {/* Day cells */}
             <div className="flex-1 grid grid-cols-7 divide-x divide-zinc-800">
               {days.map(day => {
                 const entry = getEntry(day, meal)
@@ -320,6 +397,153 @@ function DayView({ day, getEntry, openSlot }: DayViewProps) {
       >
         + Add meal
       </button>
+    </div>
+  )
+}
+
+// ── Todo Month View ─────────────────────────────────────────────────────────
+
+interface TodoViewProps {
+  days: Date[]
+  current?: Date
+  getTodos: (date: Date) => Todo[]
+  profiles: Profile[]
+  openDay: (date: Date) => void
+}
+
+function TodoMonthView({ days, current, getTodos, profiles, openDay }: TodoViewProps) {
+  const weekDays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+  const numWeeks = days.length / 7
+  return (
+    <div className="flex flex-col flex-1 min-h-0">
+      <div className="grid grid-cols-7 border-b border-zinc-800 flex-shrink-0">
+        {weekDays.map(d => (
+          <div key={d} className="text-center text-xs text-zinc-600 py-2 font-medium">{d}</div>
+        ))}
+      </div>
+      <div className="grid grid-cols-7 flex-1" style={{ gridTemplateRows: `repeat(${numWeeks}, 1fr)` }}>
+        {days.map(day => {
+          const inMonth = current ? isSameMonth(day, current) : true
+          const today = isToday(day)
+          const dayTodos = getTodos(day)
+          return (
+            <button
+              key={day.toISOString()}
+              onClick={() => openDay(day)}
+              className={`border-b border-r border-zinc-800 p-1 flex flex-col items-start justify-start gap-0.5 transition-colors hover:bg-zinc-800/50 ${!inMonth ? 'opacity-30' : ''}`}
+            >
+              <div className={`text-xs font-medium w-5 h-5 flex items-center justify-center rounded-full mb-0.5 ${
+                today ? 'bg-green-500 text-zinc-950 font-bold' : 'text-zinc-300'
+              }`}>
+                {format(day, 'd')}
+              </div>
+              {dayTodos.map(todo => {
+                const overdue = isPast(parseISO(todo.due_date)) && !isToday(day)
+                const color = overdue ? '#ef4444' : getProfileColor(todo.assigned_to, profiles)
+                return (
+                  <span
+                    key={todo.id}
+                    className="w-full truncate rounded px-1 py-0.5 text-[9px] font-medium leading-tight text-white"
+                    style={{ backgroundColor: color }}
+                  >
+                    {todo.name}
+                  </span>
+                )
+              })}
+            </button>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+// ── Todo Week View ──────────────────────────────────────────────────────────
+
+function TodoWeekView({ days, getTodos, profiles, openDay }: Omit<TodoViewProps, 'current'>) {
+  return (
+    <div className="flex flex-col flex-1 min-h-0">
+      {/* Day headers */}
+      <div className="flex border-b border-zinc-800 flex-shrink-0">
+        <div className="flex-1 grid grid-cols-7 divide-x divide-zinc-800">
+          {days.map(day => {
+            const today = isToday(day)
+            return (
+              <button
+                key={day.toISOString()}
+                onClick={() => openDay(day)}
+                className="flex flex-col items-center py-3 gap-1 hover:bg-zinc-800/40 transition-colors"
+              >
+                <span className={`text-xs font-medium ${today ? 'text-green-400' : 'text-zinc-500'}`}>
+                  {format(day, 'EEE')}
+                </span>
+                <span className={`w-8 h-8 flex items-center justify-center rounded-full text-sm font-semibold ${
+                  today ? 'bg-green-500 text-zinc-950' : 'text-zinc-200'
+                }`}>
+                  {format(day, 'd')}
+                </span>
+              </button>
+            )
+          })}
+        </div>
+      </div>
+
+      {/* Todo columns per day */}
+      <div className="flex flex-1 min-h-0 divide-x divide-zinc-800 overflow-y-auto">
+        {days.map(day => {
+          const dayTodos = getTodos(day)
+          return (
+            <div key={day.toISOString()} className="flex-1 min-w-0 p-1 flex flex-col gap-1">
+              {dayTodos.length === 0 ? (
+                <span className="text-zinc-800 text-xs text-center mt-2">—</span>
+              ) : (
+                dayTodos.map(todo => {
+                  const overdue = isPast(parseISO(todo.due_date)) && !isToday(day)
+                  const color = overdue ? '#ef4444' : getProfileColor(todo.assigned_to, profiles)
+                  return (
+                    <div
+                      key={todo.id}
+                      className="rounded px-1 py-0.5 text-[10px] font-medium leading-tight text-white truncate"
+                      style={{ backgroundColor: color }}
+                      title={todo.name}
+                    >
+                      {todo.name}
+                    </div>
+                  )
+                })
+              )}
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+// ── Todo Day View ───────────────────────────────────────────────────────────
+
+function TodoDayView({ day, getTodos, profiles }: { day: Date; getTodos: (date: Date) => Todo[]; profiles: Profile[] }) {
+  const dayTodos = getTodos(day)
+  return (
+    <div className="max-w-lg mx-auto px-4 py-4 flex flex-col gap-3 overflow-y-auto">
+      {dayTodos.length === 0 ? (
+        <p className="text-center text-zinc-600 text-sm py-10">No todos for this day.</p>
+      ) : (
+        dayTodos.map(todo => {
+          const overdue = isPast(parseISO(todo.due_date)) && !isToday(day)
+          const color = overdue ? '#ef4444' : getProfileColor(todo.assigned_to, profiles)
+          return (
+            <div key={todo.id} className="rounded-2xl p-4" style={{ backgroundColor: color }}>
+              <p className="font-semibold text-sm text-white">{todo.name}</p>
+              <p className="text-xs mt-1 text-white/70">
+                {todo.assigned_to === 'all' ? 'Everyone' : todo.assigned_to}
+                {todo.recurring && ' · Recurring'}
+                {overdue && ' · Overdue'}
+              </p>
+            </div>
+          )
+        })
+      )}
     </div>
   )
 }
