@@ -35,6 +35,7 @@ export default function Todos() {
   const [todos, setTodos] = useState<Todo[]>([])
   const [profiles, setProfiles] = useState<Profile[]>([])
   const [showForm, setShowForm] = useState(false)
+  const [editingTodo, setEditingTodo] = useState<Todo | null>(null)
   const [loading, setLoading] = useState(true)
   const [tab, setTab] = useState<'open' | 'done'>('open')
   const [filterUser, setFilterUser] = useState<string>('all')
@@ -96,11 +97,12 @@ export default function Todos() {
         </button>
       </div>
 
-      {showForm && (
+      {(showForm || editingTodo) && (
         <TodoForm
           profiles={profiles}
-          onSave={async () => { await fetchAll(); setShowForm(false) }}
-          onCancel={() => setShowForm(false)}
+          todo={editingTodo ?? undefined}
+          onSave={async () => { await fetchAll(); setShowForm(false); setEditingTodo(null) }}
+          onCancel={() => { setShowForm(false); setEditingTodo(null) }}
         />
       )}
 
@@ -144,7 +146,7 @@ export default function Todos() {
       ) : (
         <div className="flex flex-col gap-2">
           {displayed.map(todo => (
-            <TodoItem key={todo.id} todo={todo} onToggle={toggleComplete} onDelete={deleteTodo} />
+            <TodoItem key={todo.id} todo={todo} onToggle={toggleComplete} onDelete={deleteTodo} onEdit={setEditingTodo} />
           ))}
         </div>
       )}
@@ -168,7 +170,7 @@ function recurLabel(todo: Todo): string {
   return ''
 }
 
-function TodoItem({ todo, onToggle, onDelete }: { todo: Todo; onToggle: (t: Todo) => void; onDelete: (id: string) => void }) {
+function TodoItem({ todo, onToggle, onDelete, onEdit }: { todo: Todo; onToggle: (t: Todo) => void; onDelete: (id: string) => void; onEdit: (t: Todo) => void }) {
   const due = parseISO(todo.due_date)
   const overdue = !todo.completed && isPast(due) && !isToday(due)
   const dueToday = !todo.completed && isToday(due)
@@ -184,7 +186,7 @@ function TodoItem({ todo, onToggle, onDelete }: { todo: Todo; onToggle: (t: Todo
           todo.completed ? 'bg-green-500 border-green-500' : overdue ? 'border-red-400 hover:bg-red-400/20' : 'border-zinc-600 hover:border-green-500'
         }`}
       />
-      <div className="flex-1 min-w-0">
+      <button onClick={() => onEdit(todo)} className="flex-1 min-w-0 text-left">
         <p className={`text-sm font-medium ${todo.completed ? 'line-through text-zinc-600' : 'text-zinc-100'}`}>
           {todo.name}
         </p>
@@ -201,7 +203,7 @@ function TodoItem({ todo, onToggle, onDelete }: { todo: Todo; onToggle: (t: Todo
             </>
           )}
         </div>
-      </div>
+      </button>
       <button onClick={() => onDelete(todo.id)} className="text-zinc-700 hover:text-red-400 text-lg leading-none transition-colors flex-shrink-0">×</button>
     </div>
   )
@@ -209,35 +211,40 @@ function TodoItem({ todo, onToggle, onDelete }: { todo: Todo; onToggle: (t: Todo
 
 interface TodoFormProps {
   profiles: Profile[]
+  todo?: Todo
   onSave: () => void
   onCancel: () => void
 }
 
-function TodoForm({ profiles, onSave, onCancel }: TodoFormProps) {
-  const [name, setName] = useState('')
-  const [dueDate, setDueDate] = useState('')
-  const [assignedTo, setAssignedTo] = useState('all')
-  const [recurring, setRecurring] = useState(false)
-  const [recurType, setRecurType] = useState<'daily' | 'weekly' | 'monthly'>('weekly')
-  const [recurInterval, setRecurInterval] = useState(1)
-  const [weekPosition, setWeekPosition] = useState<'start' | 'middle' | 'end'>('end')
-  const [monthDay, setMonthDay] = useState(1)
+function TodoForm({ profiles, todo, onSave, onCancel }: TodoFormProps) {
+  const [name, setName] = useState(todo?.name ?? '')
+  const [dueDate, setDueDate] = useState(todo?.due_date ?? '')
+  const [assignedTo, setAssignedTo] = useState(todo?.assigned_to ?? 'all')
+  const [recurring, setRecurring] = useState(todo?.recurring ?? false)
+  const [recurType, setRecurType] = useState<'daily' | 'weekly' | 'monthly'>((todo?.recur_type as 'daily' | 'weekly' | 'monthly') ?? 'weekly')
+  const [recurInterval, setRecurInterval] = useState(todo?.recur_interval ?? 1)
+  const [weekPosition, setWeekPosition] = useState<'start' | 'middle' | 'end'>((todo?.recur_week_position as 'start' | 'middle' | 'end') ?? 'end')
+  const [monthDay, setMonthDay] = useState(todo?.recur_month_day ?? 1)
   const [saving, setSaving] = useState(false)
 
   async function save() {
     if (!name.trim() || !dueDate) return
     setSaving(true)
-    await supabase.from('todos').insert({
+    const payload = {
       name: name.trim(),
       due_date: dueDate,
       assigned_to: assignedTo,
-      completed: false,
       recurring,
       recur_type: recurring ? recurType : null,
       recur_interval: recurring ? recurInterval : null,
       recur_week_position: recurring && recurType === 'weekly' ? weekPosition : null,
       recur_month_day: recurring && recurType === 'monthly' ? monthDay : null,
-    })
+    }
+    if (todo) {
+      await supabase.from('todos').update(payload).eq('id', todo.id)
+    } else {
+      await supabase.from('todos').insert({ ...payload, completed: false })
+    }
     setSaving(false)
     onSave()
   }
@@ -246,7 +253,7 @@ function TodoForm({ profiles, onSave, onCancel }: TodoFormProps) {
 
   return (
     <div className="bg-zinc-900 border border-zinc-700 rounded-xl p-4 mb-4 flex flex-col gap-3">
-      <h3 className="font-semibold text-zinc-100">New Todo</h3>
+      <h3 className="font-semibold text-zinc-100">{todo ? 'Edit Todo' : 'New Todo'}</h3>
 
       <input value={name} onChange={e => setName(e.target.value)} placeholder="What needs to be done?" className={inputClass} />
 
@@ -354,7 +361,7 @@ function TodoForm({ profiles, onSave, onCancel }: TodoFormProps) {
           disabled={saving || !name.trim() || !dueDate}
           className="flex-1 bg-green-500 hover:bg-green-400 text-zinc-950 rounded-xl py-2.5 text-sm font-bold disabled:opacity-30 transition-colors"
         >
-          {saving ? 'Saving…' : 'Save'}
+          {saving ? 'Saving…' : todo ? 'Update' : 'Save'}
         </button>
         <button onClick={onCancel} className="flex-1 border border-zinc-700 rounded-xl py-2.5 text-sm text-zinc-400 hover:bg-zinc-800 transition-colors">
           Cancel
