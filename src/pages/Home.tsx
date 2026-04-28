@@ -56,7 +56,27 @@ export default function Home() {
 
       {/* Recent activity */}
       <div className="w-full max-w-xs">
-        <h2 className="text-sm font-semibold text-zinc-500 uppercase tracking-wider mb-3">Recent Activity</h2>
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-sm font-semibold text-zinc-500 uppercase tracking-wider">Recent Activity</h2>
+          <div className="flex items-center gap-2">
+            {activity.length === 0 && !loadingActivity && (
+              <button
+                onClick={() => { setLoadingActivity(true); fetchRecentActivity().then(items => { setActivity(items); setLoadingActivity(false) }) }}
+                className="text-xs text-green-500 hover:text-green-400 transition-colors"
+              >
+                Recover
+              </button>
+            )}
+            {activity.length > 0 && (
+              <button
+                onClick={() => setActivity([])}
+                className="text-zinc-600 hover:text-zinc-400 text-lg leading-none transition-colors"
+              >
+                ×
+              </button>
+            )}
+          </div>
+        </div>
         {loadingActivity ? (
           <div className="flex justify-center py-6">
             <div className="w-5 h-5 border-4 border-green-500 border-t-transparent rounded-full animate-spin" />
