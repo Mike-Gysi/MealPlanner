@@ -6,6 +6,11 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    "hash": "794b0f4",
+    "date": "2026-04-28",
+    "message": "Added changelog section in settings tab, displaying git commits."
+  },
+  {
     "hash": "d67c545",
     "date": "2026-04-28",
     "message": "Bugfix regarding day/week/month multiplier, resized weekly view, weekly view is now default."

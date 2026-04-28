@@ -5,6 +5,7 @@ import {
   isSameMonth, isToday, subDays,
 } from 'date-fns'
 import { supabase } from '../lib/supabase'
+import { logActivity } from '../lib/activity'
 import type { CalendarEntry, Recipe } from '../types'
 
 const MEAL_TYPES = ['breakfast', 'lunch', 'dinner'] as const
@@ -368,10 +369,15 @@ function MealModal({ date, meal, entry, recipes, allEntries, onClose, onSaved }:
       custom_text: mode === 'text' && customText.trim() ? customText.trim() : null,
       leftover_of: leftoverOf || null,
     }
+    const mealName = mode === 'recipe'
+      ? (recipes.find(r => r.id === recipeId)?.name ?? recipeId)
+      : customText.trim()
     if (entry) {
       await supabase.from('calendar_entries').update(payload).eq('id', entry.id)
+      logActivity('updated meal plan', 'calendar', `${selectedMeal} — ${mealName}`)
     } else {
       await supabase.from('calendar_entries').insert(payload)
+      logActivity('planned meal', 'calendar', `${selectedMeal} — ${mealName}`)
     }
     if (addToShopping && mode === 'recipe' && recipeId) {
       await mergeIngredientsToShoppingList(recipeId, recipes)
@@ -382,7 +388,9 @@ function MealModal({ date, meal, entry, recipes, allEntries, onClose, onSaved }:
 
   async function deleteEntry() {
     if (!entry) return
+    const mealName = entry.recipe?.name ?? entry.custom_text ?? 'meal'
     await supabase.from('calendar_entries').delete().eq('id', entry.id)
+    logActivity('removed meal plan', 'calendar', `${entry.meal_type} — ${mealName}`)
     onSaved()
   }
 

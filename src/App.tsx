@@ -5,6 +5,7 @@ import type { Session } from '@supabase/supabase-js'
 import { isPast, isToday, parseISO, format } from 'date-fns'
 import Layout from './components/Layout'
 import Login from './pages/Login'
+import Home from './pages/Home'
 import CalendarPage from './pages/CalendarPage'
 import ShoppingList from './pages/ShoppingList'
 import Recipes from './pages/Recipes'
@@ -65,13 +66,13 @@ export default function App() {
           </>
         ) : (
           <Route element={<Layout />}>
-            <Route path="/" element={<Navigate to="/calendar" replace />} />
+            <Route path="/" element={<Home />} />
             <Route path="/calendar" element={<CalendarPage />} />
             <Route path="/shopping" element={<ShoppingList />} />
             <Route path="/todos" element={<Todos />} />
             <Route path="/recipes" element={<Recipes />} />
             <Route path="/settings" element={<Settings />} />
-            <Route path="*" element={<Navigate to="/calendar" replace />} />
+            <Route path="*" element={<Navigate to="/" replace />} />
           </Route>
         )}
       </Routes>

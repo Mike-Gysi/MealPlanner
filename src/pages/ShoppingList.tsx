@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
+import { logActivity } from '../lib/activity'
 import type { ShoppingItem, ShoppingHistoryItem } from '../types'
 import { format } from 'date-fns'
 
@@ -60,6 +61,7 @@ export default function ShoppingList() {
       .select().single()
     if (data) setItems(prev => [...prev, data])
     if (!name) setInput('')
+    logActivity('added to shopping list', 'shopping', parsed.name)
   }
 
   async function purchaseItem(item: ShoppingItem) {
@@ -67,6 +69,7 @@ export default function ShoppingList() {
       supabase.from('shopping_list_items').delete().eq('id', item.id),
       supabase.from('shopping_list_history').insert({ name: item.name, quantity: item.quantity, unit: item.unit }),
     ])
+    logActivity('purchased', 'shopping', item.name)
     setItems(prev => prev.filter(i => i.id !== item.id))
     const { data } = await supabase.from('shopping_list_history').select('*').order('purchased_at', { ascending: false }).limit(200)
     const hist = data ?? []
@@ -75,8 +78,10 @@ export default function ShoppingList() {
   }
 
   async function deleteItem(id: string) {
+    const item = items.find(i => i.id === id)
     await supabase.from('shopping_list_items').delete().eq('id', id)
     setItems(prev => prev.filter(i => i.id !== id))
+    if (item) logActivity('removed from shopping list', 'shopping', item.name)
   }
 
   function parseItem(text: string): { name: string; quantity: number | null; unit: string | null } {

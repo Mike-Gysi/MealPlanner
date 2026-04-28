@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Outlet, NavLink } from 'react-router-dom'
+import { Outlet, NavLink, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 
 const nav = [
@@ -12,6 +12,7 @@ const nav = [
 
 export default function Layout() {
   const [username, setUsername] = useState('')
+  const navigate = useNavigate()
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => {
@@ -26,7 +27,10 @@ export default function Layout() {
   return (
     <div className="h-full bg-zinc-950 flex flex-col">
       <header className="bg-zinc-900 border-b border-zinc-800 px-4 py-3 flex-shrink-0 z-40">
-        <span className="text-lg font-bold text-green-400 tracking-tight">🐝 The Bee Hive</span>
+        <span
+          className="text-lg font-bold text-green-400 tracking-tight cursor-pointer"
+          onClick={() => navigate('/')}
+        >🐝 The Bee Hive</span>
         {username && (
           <p className="text-xs text-zinc-500 mt-0.5">
             Hello <span className="text-zinc-300 font-medium">{username}</span>, welcome to the Bee Hive 🐝

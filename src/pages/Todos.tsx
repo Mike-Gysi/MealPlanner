@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
+import { logActivity } from '../lib/activity'
 import type { Todo, Profile } from '../types'
 import {
   format, isPast, isToday, parseISO,
@@ -61,6 +62,7 @@ export default function Todos() {
 
   async function toggleComplete(todo: Todo) {
     await supabase.from('todos').update({ completed: !todo.completed }).eq('id', todo.id)
+    logActivity(!todo.completed ? 'completed todo' : 'reopened todo', 'todo', todo.name)
     // If completing a recurring todo, spawn the next occurrence
     if (!todo.completed && todo.recurring) {
       const { name, assigned_to, recurring, recur_type, recur_interval, recur_week_position, recur_month_day } = todo
@@ -74,8 +76,10 @@ export default function Todos() {
   }
 
   async function deleteTodo(id: string) {
+    const todo = todos.find(t => t.id === id)
     await supabase.from('todos').delete().eq('id', id)
     setTodos(prev => prev.filter(t => t.id !== id))
+    if (todo) logActivity('deleted todo', 'todo', todo.name)
   }
 
   const byUser = (list: Todo[]) => filterUser === 'all'
@@ -242,8 +246,10 @@ function TodoForm({ profiles, todo, onSave, onCancel }: TodoFormProps) {
     }
     if (todo) {
       await supabase.from('todos').update(payload).eq('id', todo.id)
+      logActivity('updated todo', 'todo', payload.name)
     } else {
       await supabase.from('todos').insert({ ...payload, completed: false })
+      logActivity('added todo', 'todo', payload.name)
     }
     setSaving(false)
     onSave()

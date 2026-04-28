@@ -1,5 +1,6 @@
 import { useEffect, useState, useRef } from 'react'
 import { supabase } from '../lib/supabase'
+import { logActivity } from '../lib/activity'
 import type { Recipe, RecipeIngredient, RecipeCategory } from '../types'
 
 export default function Recipes() {
@@ -28,8 +29,10 @@ export default function Recipes() {
 
   async function deleteRecipe(id: string) {
     if (!confirm('Delete this recipe?')) return
+    const recipe = recipes.find(r => r.id === id)
     await supabase.from('recipes').delete().eq('id', id)
     setRecipes(prev => prev.filter(r => r.id !== id))
+    if (recipe) logActivity('deleted recipe', 'recipe', recipe.name)
   }
 
   async function handleImport(e: React.ChangeEvent<HTMLInputElement>) {
@@ -245,12 +248,14 @@ function RecipeForm({ recipe, categories: initialCategories, onSave, onCancel }:
       await supabase.from('recipe_ingredients').delete().eq('recipe_id', recipe.id)
       const rows = ingredients.filter(i => i.name?.trim()).map(i => ({ recipe_id: recipe.id, name: i.name!.trim(), quantity: i.quantity ?? null, unit: i.unit ?? null }))
       if (rows.length) await supabase.from('recipe_ingredients').insert(rows)
+      logActivity('updated recipe', 'recipe', name.trim())
     } else {
       const { data } = await supabase.from('recipes').insert({ name: name.trim(), category_id: categoryId || null }).select().single()
       if (data) {
         const rows = ingredients.filter(i => i.name?.trim()).map(i => ({ recipe_id: data.id, name: i.name!.trim(), quantity: i.quantity ?? null, unit: i.unit ?? null }))
         if (rows.length) await supabase.from('recipe_ingredients').insert(rows)
       }
+      logActivity('added recipe', 'recipe', name.trim())
     }
     setSaving(false)
     onSave()
