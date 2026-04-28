@@ -16,6 +16,7 @@ export default function Home() {
   const [username, setUsername] = useState('')
   const [activity, setActivity] = useState<ActivityItem[]>([])
   const [loadingActivity, setLoadingActivity] = useState(true)
+  const [beeDone, setBeeDone] = useState(false)
   const navigate = useNavigate()
 
   useEffect(() => {
@@ -26,13 +27,38 @@ export default function Home() {
       setActivity(items)
       setLoadingActivity(false)
     })
+    const t = setTimeout(() => setBeeDone(true), 2000)
+    return () => clearTimeout(t)
   }, [])
 
   return (
+    <>
+    <style>{`
+      @keyframes bee-fly-in {
+        0%   { transform: translate(110px, 190px) rotate(28deg) scale(2.4); opacity: 0; }
+        8%   { opacity: 1; }
+        25%  { transform: translate(-95px, 115px) rotate(-24deg) scale(2.1); }
+        45%  { transform: translate(70px, -80px) rotate(16deg) scale(1.9); }
+        65%  { transform: translate(-50px, -40px) rotate(-14deg) scale(1.6); }
+        82%  { transform: translate(28px, 48px) rotate(8deg) scale(1.3); }
+        100% { transform: translate(0, 0) rotate(0deg) scale(1); opacity: 1; }
+      }
+    `}</style>
     <div className="flex flex-col items-center px-6 py-10 gap-10 pb-24">
       {/* Title */}
       <div className="text-center">
-        <h1 className="text-5xl font-extrabold text-green-400 tracking-tight">🐝 The Bee Hive</h1>
+        <h1 className="text-5xl font-extrabold text-green-400 tracking-tight">
+          <span className="relative inline-block">
+            <span style={{ opacity: beeDone ? 1 : 0 }}>🐝</span>
+            {!beeDone && (
+              <span
+                className="absolute top-0 left-0 pointer-events-none"
+                style={{ animation: 'bee-fly-in 2s cubic-bezier(0.4, 0, 0.2, 1) forwards' }}
+              >🐝</span>
+            )}
+          </span>
+          {' '}The Bee Hive
+        </h1>
         {username && (
           <p className="text-zinc-400 mt-3 text-base">
             Hello <span className="text-zinc-200 font-semibold">{username}</span>, welcome back
@@ -104,5 +130,6 @@ export default function Home() {
         )}
       </div>
     </div>
+    </>
   )
 }
