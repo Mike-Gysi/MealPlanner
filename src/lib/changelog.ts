@@ -6,6 +6,11 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    "hash": "b9081b7",
+    "date": "2026-04-28",
+    "message": "Added Home Screen, added who created what as database entry."
+  },
+  {
     "hash": "794b0f4",
     "date": "2026-04-28",
     "message": "Added changelog section in settings tab, displaying git commits."

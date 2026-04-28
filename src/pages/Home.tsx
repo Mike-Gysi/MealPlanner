@@ -35,7 +35,7 @@ export default function Home() {
         <h1 className="text-5xl font-extrabold text-green-400 tracking-tight">🐝 The Bee Hive</h1>
         {username && (
           <p className="text-zinc-400 mt-3 text-base">
-            Hello <span className="text-zinc-200 font-semibold">{username}</span>, welcome back 🐝
+            Hello <span className="text-zinc-200 font-semibold">{username}</span>, welcome back
           </p>
         )}
       </div>

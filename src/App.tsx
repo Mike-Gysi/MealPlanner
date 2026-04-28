@@ -65,15 +65,17 @@ export default function App() {
             <Route path="*" element={<Navigate to="/login" replace />} />
           </>
         ) : (
-          <Route element={<Layout />}>
+          <>
             <Route path="/" element={<Home />} />
-            <Route path="/calendar" element={<CalendarPage />} />
-            <Route path="/shopping" element={<ShoppingList />} />
-            <Route path="/todos" element={<Todos />} />
-            <Route path="/recipes" element={<Recipes />} />
-            <Route path="/settings" element={<Settings />} />
+            <Route element={<Layout />}>
+              <Route path="/calendar" element={<CalendarPage />} />
+              <Route path="/shopping" element={<ShoppingList />} />
+              <Route path="/todos" element={<Todos />} />
+              <Route path="/recipes" element={<Recipes />} />
+              <Route path="/settings" element={<Settings />} />
+            </Route>
             <Route path="*" element={<Navigate to="/" replace />} />
-          </Route>
+          </>
         )}
       </Routes>
 

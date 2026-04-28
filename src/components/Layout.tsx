@@ -33,7 +33,7 @@ export default function Layout() {
         >🐝 The Bee Hive</span>
         {username && (
           <p className="text-xs text-zinc-500 mt-0.5">
-            Hello <span className="text-zinc-300 font-medium">{username}</span>, welcome to the Bee Hive 🐝
+            Hello <span className="text-zinc-300 font-medium">{username}</span>, welcome to the Bee Hive
           </p>
         )}
       </header>
