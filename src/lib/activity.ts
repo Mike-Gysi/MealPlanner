@@ -17,10 +17,10 @@ const ICONS: Record<string, string> = {
 }
 
 export function logActivity(action: string, entityType: string, entityName: string): void {
-  supabase.auth.getSession().then(({ data: { session } }) => {
+  supabase.auth.getSession().then(async ({ data: { session } }) => {
     if (!session) return
     const username = session.user.user_metadata?.username ?? 'Someone'
-    supabase.from('activity_log')
+    await supabase.from('activity_log')
       .insert({ user_id: session.user.id, username, action, entity_type: entityType, entity_name: entityName })
   })
 }

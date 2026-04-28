@@ -60,8 +60,30 @@ export default function Home() {
       )
       setOpenGroups(keys)
     })
+    const channel = supabase.channel('activity-sync')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'activity_log' }, () => {
+        fetchRecentActivity().then(items => {
+          setActivity(items)
+          setOpenGroups(prev => {
+            const next = new Set(prev)
+            for (const item of items) {
+              const key = format(new Date(item.timestamp), 'yyyy-MM-dd')
+              const d = parseISO(key)
+              if (isToday(d) || isYesterday(d)) next.add(key)
+            }
+            return next
+          })
+        })
+      })
+      .subscribe()
+    // Re-fetch after a short delay to catch activity logged just before navigating here
+    const refetch = setTimeout(() => {
+      fetchRecentActivity().then(items => {
+        setActivity(prev => items.length > prev.length ? items : prev)
+      })
+    }, 1500)
     const t = setTimeout(() => setBeeDone(true), 2000)
-    return () => clearTimeout(t)
+    return () => { clearTimeout(t); clearTimeout(refetch); supabase.removeChannel(channel) }
   }, [])
 
   function toggleGroup(key: string) {
