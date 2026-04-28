@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { formatDistanceToNow } from 'date-fns'
+import { format, isToday, isYesterday, parseISO, formatDistanceToNow } from 'date-fns'
 import { supabase } from '../lib/supabase'
 import { fetchRecentActivity, type ActivityItem } from '../lib/activity'
 
@@ -12,11 +12,34 @@ const nav = [
   { to: '/settings', label: 'Settings', icon: '⚙️' },
 ]
 
+interface ActivityGroup {
+  key: string
+  label: string
+  items: ActivityItem[]
+}
+
+function groupActivity(items: ActivityItem[]): ActivityGroup[] {
+  const map = new Map<string, ActivityItem[]>()
+  for (const item of items) {
+    const key = format(new Date(item.timestamp), 'yyyy-MM-dd')
+    if (!map.has(key)) map.set(key, [])
+    map.get(key)!.push(item)
+  }
+  return Array.from(map.entries())
+    .sort(([a], [b]) => b.localeCompare(a))
+    .map(([key, groupItems]) => {
+      const date = parseISO(key)
+      const label = isToday(date) ? 'Today' : isYesterday(date) ? 'Yesterday' : format(date, 'd MMM yyyy')
+      return { key, label, items: groupItems }
+    })
+}
+
 export default function Home() {
   const [username, setUsername] = useState('')
   const [activity, setActivity] = useState<ActivityItem[]>([])
   const [loadingActivity, setLoadingActivity] = useState(true)
   const [beeDone, setBeeDone] = useState(false)
+  const [openGroups, setOpenGroups] = useState<Set<string>>(new Set())
   const navigate = useNavigate()
 
   useEffect(() => {
@@ -26,10 +49,31 @@ export default function Home() {
     fetchRecentActivity().then(items => {
       setActivity(items)
       setLoadingActivity(false)
+      // open today and yesterday by default
+      const keys = new Set(
+        items
+          .map(i => format(new Date(i.timestamp), 'yyyy-MM-dd'))
+          .filter(k => {
+            const d = parseISO(k)
+            return isToday(d) || isYesterday(d)
+          })
+      )
+      setOpenGroups(keys)
     })
     const t = setTimeout(() => setBeeDone(true), 2000)
     return () => clearTimeout(t)
   }, [])
+
+  function toggleGroup(key: string) {
+    setOpenGroups(prev => {
+      const next = new Set(prev)
+      if (next.has(key)) next.delete(key)
+      else next.add(key)
+      return next
+    })
+  }
+
+  const groups = groupActivity(activity)
 
   return (
     <>
@@ -102,6 +146,7 @@ export default function Home() {
             )}
           </div>
         </div>
+
         {loadingActivity ? (
           <div className="flex justify-center py-6">
             <div className="w-5 h-5 border-4 border-green-500 border-t-transparent rounded-full animate-spin" />
@@ -110,21 +155,45 @@ export default function Home() {
           <p className="text-center text-zinc-600 text-sm py-6">No activity yet.</p>
         ) : (
           <div className="flex flex-col gap-2">
-            {activity.map(item => (
-              <div key={item.id} className="flex items-start gap-3 bg-zinc-800/60 rounded-xl px-3 py-2.5 border border-zinc-700/50">
-                <span className="text-base leading-none mt-0.5 flex-shrink-0">{item.icon}</span>
-                <div className="flex-1 min-w-0">
-                  <p className="text-xs text-zinc-300">
-                    <span className="font-semibold text-green-400">{item.username}</span>
-                    {' '}{item.action}
-                  </p>
-                  <p className="text-xs text-zinc-500 truncate">{item.entityName}</p>
+            {groups.map(group => {
+              const open = openGroups.has(group.key)
+              return (
+                <div key={group.key} className="rounded-xl border border-zinc-700/50 overflow-hidden">
+                  {/* Group header */}
+                  <button
+                    onClick={() => toggleGroup(group.key)}
+                    className="w-full flex items-center justify-between px-3 py-2 bg-zinc-800 hover:bg-zinc-750 transition-colors"
+                  >
+                    <span className="text-xs font-semibold text-zinc-300">{group.label}</span>
+                    <span className="flex items-center gap-1.5">
+                      <span className="text-[10px] text-zinc-600">{group.items.length}</span>
+                      <span className={`text-zinc-500 text-xs transition-transform duration-200 ${open ? 'rotate-90' : ''}`}>›</span>
+                    </span>
+                  </button>
+
+                  {/* Group items */}
+                  {open && (
+                    <div className="flex flex-col divide-y divide-zinc-700/40">
+                      {group.items.map(item => (
+                        <div key={item.id} className="flex items-start gap-3 bg-zinc-800/40 px-3 py-2.5">
+                          <span className="text-base leading-none mt-0.5 flex-shrink-0">{item.icon}</span>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-xs text-zinc-300">
+                              <span className="font-semibold text-green-400">{item.username}</span>
+                              {' '}{item.action}
+                            </p>
+                            <p className="text-xs text-zinc-500 truncate">{item.entityName}</p>
+                          </div>
+                          <span className="text-[10px] text-zinc-600 flex-shrink-0 mt-0.5 whitespace-nowrap">
+                            {formatDistanceToNow(new Date(item.timestamp), { addSuffix: true })}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
-                <span className="text-[10px] text-zinc-600 flex-shrink-0 mt-0.5">
-                  {formatDistanceToNow(new Date(item.timestamp), { addSuffix: true })}
-                </span>
-              </div>
-            ))}
+              )
+            })}
           </div>
         )}
       </div>
