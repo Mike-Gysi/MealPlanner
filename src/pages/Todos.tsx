@@ -236,7 +236,7 @@ function TodoForm({ profiles, todo, onSave, onCancel }: TodoFormProps) {
       assigned_to: assignedTo,
       recurring,
       recur_type: recurring ? recurType : null,
-      recur_interval: recurring ? recurInterval : null,
+      recur_interval: recurring ? (isNaN(recurInterval) || recurInterval < 1 ? 1 : recurInterval) : null,
       recur_week_position: recurring && recurType === 'weekly' ? weekPosition : null,
       recur_month_day: recurring && recurType === 'monthly' ? monthDay : null,
     }
@@ -307,8 +307,9 @@ function TodoForm({ profiles, todo, onSave, onCancel }: TodoFormProps) {
               type="number"
               min={1}
               max={52}
-              value={recurInterval}
-              onChange={e => setRecurInterval(Math.max(1, parseInt(e.target.value) || 1))}
+              value={isNaN(recurInterval) ? '' : recurInterval}
+              onChange={e => setRecurInterval(parseInt(e.target.value))}
+              onBlur={() => { if (isNaN(recurInterval) || recurInterval < 1) setRecurInterval(1) }}
               className="w-16 bg-zinc-800 border border-zinc-700 rounded-lg px-2 py-1.5 text-sm text-zinc-100 focus:outline-none focus:ring-2 focus:ring-green-500"
             />
             <span className="text-xs text-zinc-500">

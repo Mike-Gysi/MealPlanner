@@ -26,7 +26,7 @@ type ViewMode = 'month' | 'week' | 'day'
 
 export default function CalendarPage() {
   const [current, setCurrent] = useState(new Date())
-  const [view, setView] = useState<ViewMode>('month')
+  const [view, setView] = useState<ViewMode>('week')
   const [entries, setEntries] = useState<CalendarEntry[]>([])
   const [recipes, setRecipes] = useState<Recipe[]>([])
   const [modal, setModal] = useState<{ date: string; meal: MealType; entry: CalendarEntry | null } | null>(null)
@@ -105,7 +105,7 @@ export default function CalendarPage() {
           <MonthView days={days} current={current} getEntry={getEntry} openDay={openDay} />
         )}
         {view === 'week' && (
-          <WeekView days={days} getEntry={getEntry} openDay={openDay} />
+          <WeekView days={days} getEntry={getEntry} openDay={openDay} openSlot={openSlot} />
         )}
         {view === 'day' && (
           <DayView day={current} getEntry={getEntry} openSlot={openSlot} />
@@ -210,39 +210,75 @@ function MonthView({ days, current, getEntry, openDay }: MonthWeekProps) {
 
 // ── Week View ───────────────────────────────────────────────────────────────
 
-function WeekView({ days, getEntry, openDay }: MonthWeekProps) {
+function WeekView({ days, getEntry, openDay, openSlot }: MonthWeekProps & { openSlot: (date: Date, meal: MealType) => void }) {
   return (
-    <div className="grid grid-cols-7 divide-x divide-zinc-800 flex-1 min-h-0">
-      {days.map(day => {
-        const today = isToday(day)
-        const meals = MEAL_TYPES.map(m => ({ meal: m, entry: getEntry(day, m) })).filter(x => x.entry)
-        return (
-          <button
-            key={day.toISOString()}
-            onClick={() => openDay(day)}
-            className="flex flex-col items-center justify-start pt-3 pb-2 px-1 gap-2 hover:bg-zinc-800/50 transition-colors"
-          >
-            <div className={`text-xs font-medium ${today ? 'text-green-400' : 'text-zinc-500'}`}>
-              {format(day, 'EEE')}
+    <div className="flex flex-col flex-1 min-h-0">
+      {/* Day headers */}
+      <div className="flex border-b border-zinc-800 flex-shrink-0">
+        <div className="w-8 flex-shrink-0 border-r border-zinc-800" />
+        <div className="flex-1 grid grid-cols-7 divide-x divide-zinc-800">
+        {days.map(day => {
+          const today = isToday(day)
+          return (
+            <button
+              key={day.toISOString()}
+              onClick={() => openDay(day)}
+              className="flex flex-col items-center py-3 gap-1 hover:bg-zinc-800/40 transition-colors"
+            >
+              <span className={`text-xs font-medium ${today ? 'text-green-400' : 'text-zinc-500'}`}>
+                {format(day, 'EEE')}
+              </span>
+              <span className={`w-8 h-8 flex items-center justify-center rounded-full text-sm font-semibold ${
+                today ? 'bg-green-500 text-zinc-950' : 'text-zinc-200'
+              }`}>
+                {format(day, 'd')}
+              </span>
+            </button>
+          )
+        })}
+        </div>
+      </div>
+
+      {/* Meal rows — each takes equal vertical space */}
+      <div className="flex-1 min-h-0 flex flex-col divide-y divide-zinc-800">
+        {MEAL_TYPES.map(meal => (
+          <div key={meal} className="flex flex-1 min-h-0">
+            {/* Meal label */}
+            <div className="w-8 flex-shrink-0 flex items-center justify-center border-r border-zinc-800">
+              <span className={`text-[9px] font-bold uppercase tracking-widest -rotate-90 whitespace-nowrap ${
+                meal === 'breakfast' ? 'text-amber-500' : meal === 'lunch' ? 'text-blue-400' : 'text-violet-400'
+              }`}>
+                {meal}
+              </span>
             </div>
-            <div className={`w-8 h-8 flex items-center justify-center rounded-full text-sm font-semibold ${
-              today ? 'bg-green-500 text-zinc-950' : 'text-zinc-200'
-            }`}>
-              {format(day, 'd')}
-            </div>
-            <div className="flex flex-col gap-1 w-full">
-              {meals.map(({ meal, entry }) => {
-                const label = entry?.recipe?.name ?? entry?.custom_text ?? ''
+            {/* Day cells */}
+            <div className="flex-1 grid grid-cols-7 divide-x divide-zinc-800">
+              {days.map(day => {
+                const entry = getEntry(day, meal)
+                const label = entry?.recipe?.name ?? entry?.custom_text ?? null
                 return (
-                  <span key={meal} className={`w-full truncate rounded-md px-1 py-1 text-[10px] font-medium leading-tight text-white text-center ${MEAL_COLORS[meal]}`}>
-                    {label}
-                  </span>
+                  <button
+                    key={day.toISOString()}
+                    onClick={() => openSlot(day, meal)}
+                    className="flex flex-col items-center justify-center p-1.5 gap-1 hover:bg-zinc-800/50 transition-colors group"
+                  >
+                    {label ? (
+                      <>
+                        <span className={`w-2 h-2 rounded-full flex-shrink-0 ${MEAL_COLORS[meal]}`} />
+                        <span className="text-[11px] font-medium text-zinc-200 text-center leading-tight" style={{ wordBreak: 'break-word', display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+                          {label}
+                        </span>
+                      </>
+                    ) : (
+                      <span className="text-zinc-700 group-hover:text-zinc-500 text-xl leading-none transition-colors">+</span>
+                    )}
+                  </button>
                 )
               })}
             </div>
-          </button>
-        )
-      })}
+          </div>
+        ))}
+      </div>
     </div>
   )
 }
