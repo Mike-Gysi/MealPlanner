@@ -81,3 +81,19 @@ create policy "Authenticated users can do everything" on profiles
   for all using (auth.role() = 'authenticated');
 create policy "Authenticated users can do everything" on todos
   for all using (auth.role() = 'authenticated');
+
+-- Activity log
+create table if not exists activity_log (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid references auth.users(id) on delete set null,
+  username text not null,
+  action text not null,
+  entity_type text not null,
+  entity_name text not null,
+  created_at timestamptz default now() not null
+);
+
+alter table activity_log enable row level security;
+
+create policy "Authenticated users can do everything" on activity_log
+  for all using (auth.role() = 'authenticated');
