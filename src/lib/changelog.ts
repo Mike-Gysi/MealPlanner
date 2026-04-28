@@ -1,0 +1,53 @@
+export interface ChangelogEntry {
+  hash: string
+  date: string
+  message: string
+}
+
+export const CHANGELOG: ChangelogEntry[] = [
+  {
+    "hash": "d67c545",
+    "date": "2026-04-28",
+    "message": "Bugfix regarding day/week/month multiplier, resized weekly view, weekly view is now default."
+  },
+  {
+    "hash": "9e2b43f",
+    "date": "2026-04-28",
+    "message": "Todos are now editable."
+  },
+  {
+    "hash": "5c1738c",
+    "date": "2026-04-27",
+    "message": "Added subcategory for recipes."
+  },
+  {
+    "hash": "f647c33",
+    "date": "2026-04-27",
+    "message": "Fixed tab size."
+  },
+  {
+    "hash": "f485f5b",
+    "date": "2026-04-27",
+    "message": "Bugfixes and added todo section."
+  },
+  {
+    "hash": "c4cb68c",
+    "date": "2026-04-27",
+    "message": "Moved selection between arrows."
+  },
+  {
+    "hash": "3d4fa55",
+    "date": "2026-04-27",
+    "message": "Beautyfy."
+  },
+  {
+    "hash": "80875b2",
+    "date": "2026-04-27",
+    "message": "Adaptations to req"
+  },
+  {
+    "hash": "db10a0b",
+    "date": "2026-04-27",
+    "message": "Initial commit"
+  }
+]

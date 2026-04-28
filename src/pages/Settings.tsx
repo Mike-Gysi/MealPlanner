@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
+import { CHANGELOG } from '../lib/changelog'
+import { format, parseISO } from 'date-fns'
 
 export default function Settings() {
   const [username, setUsername] = useState('')
@@ -8,6 +10,7 @@ export default function Settings() {
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
+  const [showChangelog, setShowChangelog] = useState(false)
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => {
@@ -75,7 +78,13 @@ export default function Settings() {
         </button>
       </div>
 
-      <div className="mt-4">
+      <div className="mt-4 flex flex-col gap-2">
+        <button
+          onClick={() => setShowChangelog(true)}
+          className="w-full border border-zinc-800 text-zinc-500 hover:text-zinc-300 hover:border-zinc-600 rounded-xl py-2.5 text-sm transition-colors"
+        >
+          Changelog
+        </button>
         <button
           onClick={() => supabase.auth.signOut()}
           className="w-full border border-zinc-800 text-zinc-500 hover:text-red-400 hover:border-red-500/30 rounded-xl py-2.5 text-sm transition-colors"
@@ -83,6 +92,35 @@ export default function Settings() {
           Sign out
         </button>
       </div>
+
+      {showChangelog && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4" onClick={() => setShowChangelog(false)}>
+          <div className="bg-zinc-900 border border-zinc-700 w-full max-w-md rounded-2xl shadow-2xl flex flex-col max-h-[80vh]" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-5 py-4 border-b border-zinc-800 flex-shrink-0">
+              <h3 className="font-semibold text-zinc-100">Changelog</h3>
+              <button onClick={() => setShowChangelog(false)} className="text-zinc-600 hover:text-zinc-300 text-2xl leading-none transition-colors">×</button>
+            </div>
+            <div className="overflow-y-auto p-5 flex flex-col gap-3">
+              {CHANGELOG.map(entry => (
+                <div key={entry.hash} className="flex gap-3">
+                  <div className="flex flex-col items-center gap-1 flex-shrink-0">
+                    <div className="w-2 h-2 rounded-full bg-green-500 mt-1.5" />
+                    <div className="w-px flex-1 bg-zinc-800" />
+                  </div>
+                  <div className="pb-3">
+                    <p className="text-sm text-zinc-200 leading-snug">{entry.message}</p>
+                    <div className="flex items-center gap-2 mt-1">
+                      <span className="text-xs text-zinc-600">{format(parseISO(entry.date), 'd MMM yyyy')}</span>
+                      <span className="text-xs text-zinc-700">·</span>
+                      <span className="font-mono text-xs text-zinc-700">{entry.hash}</span>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
