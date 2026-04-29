@@ -705,7 +705,7 @@ export default function Settings() {
                         onBlur={e => updateNotifPref('todo_reminder_time', e.target.value)}
                         className="bg-zinc-800 border border-zinc-700 rounded-xl px-3 py-2 text-sm text-zinc-100 focus:outline-none focus:ring-2 focus:ring-green-500"
                       />
-                      <span className="text-xs text-zinc-600">UTC</span>
+                      <span className="text-xs text-zinc-600">Zurich</span>
                     </div>
                   )}
                 </div>

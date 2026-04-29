@@ -12,22 +12,34 @@ const supabase = createClient(
   Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
 )
 
-function utcDatePlus(base: Date, days: number): string {
-  const d = new Date(base)
-  d.setUTCDate(d.getUTCDate() + days)
-  return d.toISOString().split('T')[0]
+const TZ = 'Europe/Zurich'
+
+function zurichParts(date: Date) {
+  const parts = new Intl.DateTimeFormat('en', {
+    timeZone: TZ,
+    year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', hour12: false,
+  }).formatToParts(date)
+  const get = (type: string) => parts.find(p => p.type === type)!.value
+  return {
+    hour: parseInt(get('hour')) % 24, // guard against locale returning "24" for midnight
+    date: `${get('year')}-${get('month')}-${get('day')}`,
+  }
+}
+
+function addDays(dateStr: string, days: number): string {
+  const [y, m, d] = dateStr.split('-').map(Number)
+  return new Date(Date.UTC(y, m - 1, d + days)).toISOString().split('T')[0]
 }
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok')
   if (req.method !== 'POST') return new Response('Method not allowed', { status: 405 })
 
-  const now = new Date()
-  const currentHour = now.getUTCHours()
+  const { hour: currentHour, date: today } = zurichParts(new Date())
 
-  const date1d = utcDatePlus(now, 1)
-  const date2d = utcDatePlus(now, 2)
-  const date3d = utcDatePlus(now, 3)
+  const date1d = addDays(today, 1)
+  const date2d = addDays(today, 2)
+  const date3d = addDays(today, 3)
 
   const { data: subs } = await supabase
     .from('push_subscriptions')
@@ -42,8 +54,7 @@ Deno.serve(async (req) => {
 
   if (!prefs?.length) return new Response('ok')
 
-  // Only process users whose reminder time matches the current UTC hour
-  // and who have at least one reminder interval enabled
+  // Only process users with at least one reminder enabled whose time hour matches Zurich now
   const matchingPrefs = prefs.filter(p => {
     if (!p.todo_reminder_1d && !p.todo_reminder_2d && !p.todo_reminder_3d) return false
     const [h] = p.todo_reminder_time.split(':').map(Number)
