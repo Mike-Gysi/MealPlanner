@@ -6,6 +6,11 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    "hash": "b3c27db",
+    "date": "2026-04-29",
+    "message": "Added leader board text."
+  },
+  {
     "hash": "1cec3cf",
     "date": "2026-04-29",
     "message": "Added upcomming todos to the home screen."

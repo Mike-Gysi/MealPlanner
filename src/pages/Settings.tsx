@@ -2,14 +2,15 @@ import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { CHANGELOG } from '../lib/changelog'
 import { fetchLeaderboard, type Period, type UserScore, type LeaderboardData } from '../lib/leaderboard'
+import { createHousehold, joinHousehold, setMemberRole } from '../lib/household'
+import { useHousehold } from '../contexts/HouseholdContext'
 import { format, parseISO } from 'date-fns'
+import type { HouseholdMember } from '../types'
+
+// ── Leaderboard helpers ───────────────────────────────────────────────────────
 
 function ScoreRow({ score, rank, aheadOf, behindBy, isLeader }: {
-  score: UserScore
-  rank: number
-  aheadOf: number | null
-  behindBy: number | null
-  isLeader: boolean
+  score: UserScore; rank: number; aheadOf: number | null; behindBy: number | null; isLeader: boolean
 }) {
   return (
     <div className={`flex items-center justify-between rounded-xl px-3 py-2.5 ${isLeader ? 'bg-green-500/10 border border-green-500/20' : 'bg-zinc-800/50'}`}>
@@ -23,33 +24,23 @@ function ScoreRow({ score, rank, aheadOf, behindBy, isLeader }: {
       </div>
       <div className="flex items-center gap-1.5">
         <span className={`text-sm font-bold tabular-nums ${isLeader ? 'text-green-400' : 'text-zinc-400'}`}>{score.count}</span>
-        {aheadOf !== null && aheadOf > 0 && (
-          <span className="text-xs text-green-600/70 tabular-nums">+{aheadOf}</span>
-        )}
-        {behindBy !== null && behindBy > 0 && (
-          <span className="text-xs text-zinc-600 tabular-nums">−{behindBy}</span>
-        )}
+        {aheadOf !== null && aheadOf > 0 && <span className="text-xs text-green-600/70 tabular-nums">+{aheadOf}</span>}
+        {behindBy !== null && behindBy > 0 && <span className="text-xs text-zinc-600 tabular-nums">−{behindBy}</span>}
       </div>
     </div>
   )
 }
 
 function LeaderCategory({ label, award, scores, emptyLabel }: {
-  label: string
-  award: string
-  scores: UserScore[]
-  emptyLabel: string
+  label: string; award: string; scores: UserScore[]; emptyLabel: string
 }) {
   const leader = scores[0]
   const second = scores[1]
-
   return (
     <div className="flex flex-col gap-2">
       <div className="flex items-center justify-between">
         <span className="text-sm font-semibold text-zinc-300">{label}</span>
-        {scores.length > 0 && (
-          <span className="text-xs text-yellow-500/80 font-medium">{award}</span>
-        )}
+        {scores.length > 0 && <span className="text-xs text-yellow-500/80 font-medium">{award}</span>}
       </div>
       {scores.length === 0 ? (
         <p className="text-xs text-zinc-600 px-1">{emptyLabel}</p>
@@ -71,17 +62,36 @@ function LeaderCategory({ label, award, scores, emptyLabel }: {
   )
 }
 
+// ── Main component ────────────────────────────────────────────────────────────
+
 export default function Settings() {
+  const { household, members, isAdmin, refresh } = useHousehold()
+
+  // Account
   const [username, setUsername] = useState('')
   const [initial, setInitial] = useState('')
   const [email, setEmail] = useState('')
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState('')
-  const [error, setError] = useState('')
-  const [showChangelog, setShowChangelog] = useState(false)
+  const [acctError, setAcctError] = useState('')
+  const [currentUserId, setCurrentUserId] = useState('')
+
+  // Household management
+  const [copied, setCopied] = useState(false)
+  const [showCreateHH, setShowCreateHH] = useState(false)
+  const [showJoinHH, setShowJoinHH] = useState(false)
+  const [hhName, setHhName] = useState('')
+  const [hhKey, setHhKey] = useState('')
+  const [hhError, setHhError] = useState('')
+  const [hhLoading, setHhLoading] = useState(false)
+
+  // Leaderboard
   const [period, setPeriod] = useState<Period>('week')
   const [leaderboard, setLeaderboard] = useState<LeaderboardData | null>(null)
   const [loadingLB, setLoadingLB] = useState(true)
+
+  // Changelog
+  const [showChangelog, setShowChangelog] = useState(false)
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => {
@@ -90,30 +100,30 @@ export default function Settings() {
       setUsername(name)
       setInitial(name)
       setEmail(u?.email ?? '')
+      setCurrentUserId(u?.id ?? '')
     })
   }, [])
 
   useEffect(() => {
+    if (!household) return
     setLoadingLB(true)
-    fetchLeaderboard(period).then(data => {
+    fetchLeaderboard(period, household.id).then(data => {
       setLeaderboard(data)
       setLoadingLB(false)
     })
-  }, [period])
+  }, [period, household?.id])
 
   async function saveUsername() {
     if (!username.trim() || username.trim() === initial) return
     setSaving(true)
     setMessage('')
-    setError('')
-    const { data: userData, error } = await supabase.auth.updateUser({
-      data: { username: username.trim() },
-    })
+    setAcctError('')
+    const { data: userData, error } = await supabase.auth.updateUser({ data: { username: username.trim() } })
     if (!error && userData.user) {
       await supabase.from('profiles').upsert({ id: userData.user.id, username: username.trim() }, { onConflict: 'id' })
     }
     if (error) {
-      setError(error.message)
+      setAcctError(error.message)
     } else {
       setInitial(username.trim())
       setMessage('Username updated!')
@@ -122,14 +132,59 @@ export default function Settings() {
     setSaving(false)
   }
 
+  async function copyKey() {
+    if (!household) return
+    await navigator.clipboard.writeText(household.join_key)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
+
+  async function handleCreateHH() {
+    if (!hhName.trim()) return
+    setHhLoading(true)
+    setHhError('')
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session) { setHhError('Not authenticated'); setHhLoading(false); return }
+    const uname = session.user.user_metadata?.username ?? 'Unknown'
+    const { error: err } = await createHousehold(hhName.trim(), session.user.id, uname)
+    if (err) { setHhError(err); setHhLoading(false); return }
+    setHhName('')
+    setShowCreateHH(false)
+    await refresh()
+    setHhLoading(false)
+  }
+
+  async function handleJoinHH() {
+    if (!hhKey.trim()) return
+    setHhLoading(true)
+    setHhError('')
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session) { setHhError('Not authenticated'); setHhLoading(false); return }
+    const uname = session.user.user_metadata?.username ?? 'Unknown'
+    const { error: err } = await joinHousehold(hhKey.trim(), session.user.id, uname)
+    if (err) { setHhError(err); setHhLoading(false); return }
+    setHhKey('')
+    setShowJoinHH(false)
+    await refresh()
+    setHhLoading(false)
+  }
+
+  async function toggleRole(member: HouseholdMember) {
+    if (!household) return
+    const newRole = member.role === 'admin' ? 'member' : 'admin'
+    await setMemberRole(household.id, member.user_id, newRole)
+    await refresh()
+  }
+
   const changed = username.trim() !== initial && username.trim() !== ''
   const doerAward = period === 'week' ? 'Doer of the Week' : period === 'month' ? 'Doer of the Month' : 'Doer of the Year'
+  const inputClass = "w-full bg-zinc-800 border border-zinc-700 rounded-xl px-3 py-2.5 text-sm text-zinc-100 placeholder-zinc-600 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all"
 
   return (
     <div className="max-w-sm mx-auto px-4 py-6 flex flex-col gap-6">
       <h2 className="text-xl font-bold text-zinc-100">Settings</h2>
 
-      {/* Account */}
+      {/* ── Account ─────────────────────────────────────────────────────── */}
       <div className="flex flex-col gap-3">
         <h3 className="text-xs font-semibold text-zinc-500 uppercase tracking-wider px-1">Account</h3>
         <div className="bg-zinc-900 rounded-2xl border border-zinc-800 p-5 flex flex-col gap-4">
@@ -144,10 +199,10 @@ export default function Settings() {
               onChange={e => setUsername(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && saveUsername()}
               placeholder="Enter a username"
-              className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-3 py-2.5 text-sm text-zinc-100 placeholder-zinc-600 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all"
+              className={inputClass}
             />
           </div>
-          {error && <p className="text-red-400 text-sm bg-red-400/10 rounded-lg px-3 py-2">{error}</p>}
+          {acctError && <p className="text-red-400 text-sm bg-red-400/10 rounded-lg px-3 py-2">{acctError}</p>}
           {message && <p className="text-green-400 text-sm bg-green-400/10 rounded-lg px-3 py-2">{message}</p>}
           <button
             onClick={saveUsername}
@@ -159,45 +214,163 @@ export default function Settings() {
         </div>
       </div>
 
-      {/* Leaderboard */}
+      {/* ── Household ───────────────────────────────────────────────────── */}
       <div className="flex flex-col gap-3">
-        <h3 className="text-xs font-semibold text-zinc-500 uppercase tracking-wider px-1">Leaderboard</h3>
-        <div className="bg-zinc-900 rounded-2xl border border-zinc-800 p-5 flex flex-col gap-5">
-          <div className="flex bg-zinc-800 rounded-xl p-1 gap-1">
-            {(['week', 'month', 'year'] as Period[]).map(p => (
-              <button
-                key={p}
-                onClick={() => setPeriod(p)}
-                className={`flex-1 py-1.5 text-xs font-semibold rounded-lg capitalize transition-all ${period === p ? 'bg-zinc-700 text-zinc-100 shadow-sm' : 'text-zinc-500 hover:text-zinc-300'}`}
-              >
-                {p}
-              </button>
-            ))}
-          </div>
+        <h3 className="text-xs font-semibold text-zinc-500 uppercase tracking-wider px-1">Household</h3>
 
-          {loadingLB ? (
-            <p className="text-xs text-zinc-600 text-center py-4">Loading…</p>
-          ) : (
-            <>
-              <LeaderCategory
-                label="Todos"
-                award={doerAward}
-                scores={leaderboard?.todos ?? []}
-                emptyLabel={`No todos completed this ${period} yet`}
+        {household && (
+          <div className="bg-zinc-900 rounded-2xl border border-zinc-800 p-5 flex flex-col gap-4">
+            {/* Name */}
+            <div>
+              <label className="block text-xs font-medium text-zinc-500 uppercase tracking-wide mb-1.5">Name</label>
+              <p className="text-sm font-semibold text-zinc-100 bg-zinc-800 rounded-xl px-3 py-2.5">{household.name}</p>
+            </div>
+
+            {/* Invite key */}
+            <div>
+              <label className="block text-xs font-medium text-zinc-500 uppercase tracking-wide mb-1.5">Invite Key</label>
+              <div className="flex gap-2">
+                <p className="flex-1 text-sm font-mono font-semibold text-green-400 bg-zinc-800 rounded-xl px-3 py-2.5 tracking-widest">{household.join_key}</p>
+                <button
+                  onClick={copyKey}
+                  className="bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 rounded-xl px-3 text-xs text-zinc-400 hover:text-zinc-200 transition-colors"
+                >
+                  {copied ? 'Copied!' : 'Copy'}
+                </button>
+              </div>
+              <p className="text-[10px] text-zinc-600 mt-1.5 px-1">Share this key with others so they can join your household.</p>
+            </div>
+
+            {/* Members */}
+            <div>
+              <label className="block text-xs font-medium text-zinc-500 uppercase tracking-wide mb-2">
+                Members ({members.length})
+              </label>
+              <div className="flex flex-col gap-1.5">
+                {members.map(member => (
+                  <div key={member.id} className="flex items-center justify-between bg-zinc-800 rounded-xl px-3 py-2.5">
+                    <div className="flex items-center gap-2 min-w-0">
+                      {member.role === 'admin' && <span className="text-sm leading-none">👑</span>}
+                      <span className={`text-sm truncate ${member.user_id === currentUserId ? 'text-zinc-100 font-semibold' : member.role === 'admin' ? 'text-zinc-200' : 'text-zinc-400'}`}>
+                        {member.username}
+                        {member.user_id === currentUserId && <span className="text-zinc-600 font-normal"> (you)</span>}
+                      </span>
+                    </div>
+                    {isAdmin && member.user_id !== currentUserId && (
+                      <button
+                        onClick={() => toggleRole(member)}
+                        className="text-[11px] text-zinc-600 hover:text-zinc-300 flex-shrink-0 ml-2 transition-colors"
+                      >
+                        {member.role === 'admin' ? 'Remove admin' : 'Make admin'}
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Create / Join controls */}
+        <div className="flex flex-col gap-2">
+          <button
+            onClick={() => { setShowCreateHH(v => !v); setShowJoinHH(false); setHhError('') }}
+            className="w-full border border-zinc-800 text-zinc-500 hover:text-zinc-300 hover:border-zinc-600 rounded-xl py-2.5 text-sm transition-colors"
+          >
+            {showCreateHH ? 'Cancel' : household ? 'Create new household' : 'Create a household'}
+          </button>
+
+          {showCreateHH && (
+            <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4 flex flex-col gap-3">
+              <input
+                value={hhName}
+                onChange={e => setHhName(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && handleCreateHH()}
+                placeholder="Household name"
+                className={inputClass}
               />
-              <div className="border-t border-zinc-800" />
-              <LeaderCategory
-                label="Shopping"
-                award="Shopping Queen"
-                scores={leaderboard?.shopping ?? []}
-                emptyLabel={`No items purchased this ${period} yet`}
+              {hhError && <p className="text-red-400 text-xs bg-red-400/10 rounded-lg px-3 py-2">{hhError}</p>}
+              <button
+                onClick={handleCreateHH}
+                disabled={hhLoading || !hhName.trim()}
+                className="bg-green-500 hover:bg-green-400 text-zinc-950 rounded-xl py-2.5 text-sm font-bold disabled:opacity-30 transition-colors"
+              >
+                {hhLoading ? 'Creating…' : 'Create'}
+              </button>
+            </div>
+          )}
+
+          <button
+            onClick={() => { setShowJoinHH(v => !v); setShowCreateHH(false); setHhError('') }}
+            className="w-full border border-zinc-800 text-zinc-500 hover:text-zinc-300 hover:border-zinc-600 rounded-xl py-2.5 text-sm transition-colors"
+          >
+            {showJoinHH ? 'Cancel' : 'Join another household'}
+          </button>
+
+          {showJoinHH && (
+            <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4 flex flex-col gap-3">
+              <input
+                value={hhKey}
+                onChange={e => setHhKey(e.target.value.toUpperCase())}
+                onKeyDown={e => e.key === 'Enter' && handleJoinHH()}
+                placeholder="INVITATION-KEY"
+                className={`${inputClass} uppercase tracking-widest font-mono`}
+                maxLength={8}
               />
-            </>
+              {hhError && <p className="text-red-400 text-xs bg-red-400/10 rounded-lg px-3 py-2">{hhError}</p>}
+              <button
+                onClick={handleJoinHH}
+                disabled={hhLoading || !hhKey.trim()}
+                className="bg-green-500 hover:bg-green-400 text-zinc-950 rounded-xl py-2.5 text-sm font-bold disabled:opacity-30 transition-colors"
+              >
+                {hhLoading ? 'Joining…' : 'Join'}
+              </button>
+            </div>
           )}
         </div>
       </div>
 
-      {/* Actions */}
+      {/* ── Leaderboard ─────────────────────────────────────────────────── */}
+      {household && (
+        <div className="flex flex-col gap-3">
+          <h3 className="text-xs font-semibold text-zinc-500 uppercase tracking-wider px-1">Leaderboard</h3>
+          <div className="bg-zinc-900 rounded-2xl border border-zinc-800 p-5 flex flex-col gap-5">
+            <div className="flex bg-zinc-800 rounded-xl p-1 gap-1">
+              {(['week', 'month', 'year'] as Period[]).map(p => (
+                <button
+                  key={p}
+                  onClick={() => setPeriod(p)}
+                  className={`flex-1 py-1.5 text-xs font-semibold rounded-lg capitalize transition-all ${period === p ? 'bg-zinc-700 text-zinc-100 shadow-sm' : 'text-zinc-500 hover:text-zinc-300'}`}
+                >
+                  {p}
+                </button>
+              ))}
+            </div>
+
+            {loadingLB ? (
+              <p className="text-xs text-zinc-600 text-center py-4">Loading…</p>
+            ) : (
+              <>
+                <LeaderCategory
+                  label="Todos"
+                  award={doerAward}
+                  scores={leaderboard?.todos ?? []}
+                  emptyLabel={`No todos completed this ${period} yet`}
+                />
+                <div className="border-t border-zinc-800" />
+                <LeaderCategory
+                  label="Shopping"
+                  award="Shopping Queen"
+                  scores={leaderboard?.shopping ?? []}
+                  emptyLabel={`No items purchased this ${period} yet`}
+                />
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ── Actions ─────────────────────────────────────────────────────── */}
       <div className="flex flex-col gap-2">
         <button
           onClick={() => setShowChangelog(true)}

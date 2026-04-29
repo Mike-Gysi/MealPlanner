@@ -1,9 +1,13 @@
 import { useEffect, useState, useRef } from 'react'
 import { supabase } from '../lib/supabase'
 import { logActivity } from '../lib/activity'
+import { useHousehold } from '../contexts/HouseholdContext'
 import type { Recipe, RecipeIngredient, RecipeCategory } from '../types'
 
 export default function Recipes() {
+  const { household } = useHousehold()
+  const householdId = household?.id ?? ''
+
   const [recipes, setRecipes] = useState<Recipe[]>([])
   const [categories, setCategories] = useState<RecipeCategory[]>([])
   const [expanded, setExpanded] = useState<string | null>(null)
@@ -14,13 +18,13 @@ export default function Recipes() {
   const [filterCategory, setFilterCategory] = useState<string | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
 
-  useEffect(() => { fetchAll() }, [])
+  useEffect(() => { if (householdId) fetchAll() }, [householdId])
 
   async function fetchAll() {
     setLoading(true)
     const [{ data: recipesData }, { data: categoriesData }] = await Promise.all([
-      supabase.from('recipes').select('*, ingredients:recipe_ingredients(*), category:recipe_categories(*)').order('name'),
-      supabase.from('recipe_categories').select('*').order('name'),
+      supabase.from('recipes').select('*, ingredients:recipe_ingredients(*), category:recipe_categories(*)').eq('household_id', householdId).order('name'),
+      supabase.from('recipe_categories').select('*').eq('household_id', householdId).order('name'),
     ])
     setRecipes(recipesData ?? [])
     setCategories(categoriesData ?? [])
@@ -32,7 +36,7 @@ export default function Recipes() {
     const recipe = recipes.find(r => r.id === id)
     await supabase.from('recipes').delete().eq('id', id)
     setRecipes(prev => prev.filter(r => r.id !== id))
-    if (recipe) logActivity('deleted recipe', 'recipe', recipe.name)
+    if (recipe) logActivity('deleted recipe', 'recipe', recipe.name, householdId)
   }
 
   async function handleImport(e: React.ChangeEvent<HTMLInputElement>) {
@@ -48,7 +52,7 @@ export default function Recipes() {
         if (!line.trim()) continue
         const [name, ingredientsRaw] = parseCsvLine(line)
         if (!name) continue
-        const { data: recipe } = await supabase.from('recipes').insert({ name: name.trim() }).select().single()
+        const { data: recipe } = await supabase.from('recipes').insert({ name: name.trim(), household_id: householdId }).select().single()
         if (!recipe) continue
         const rows = ingredientsRaw.split(',').map(s => s.trim()).filter(Boolean).map(raw => {
           const m = raw.match(/^([\d.,]+)\s*([a-zA-Z]+)\s+(.+)$/)
@@ -124,6 +128,7 @@ export default function Recipes() {
         <RecipeForm
           recipe={editRecipe}
           categories={categories}
+          householdId={householdId}
           onSave={async () => { await fetchAll(); setShowForm(false) }}
           onCancel={() => setShowForm(false)}
         />
@@ -207,11 +212,12 @@ function parseCsvLine(line: string): [string, string] {
 interface RecipeFormProps {
   recipe: Recipe | null
   categories: RecipeCategory[]
+  householdId: string
   onSave: () => void
   onCancel: () => void
 }
 
-function RecipeForm({ recipe, categories: initialCategories, onSave, onCancel }: RecipeFormProps) {
+function RecipeForm({ recipe, categories: initialCategories, householdId, onSave, onCancel }: RecipeFormProps) {
   const [name, setName] = useState(recipe?.name ?? '')
   const [ingredients, setIngredients] = useState<Partial<RecipeIngredient>[]>(
     recipe?.ingredients?.length ? recipe.ingredients : [{ name: '', quantity: null, unit: null }]
@@ -231,7 +237,7 @@ function RecipeForm({ recipe, categories: initialCategories, onSave, onCancel }:
   async function createCategory() {
     const trimmed = newCategoryName.trim()
     if (!trimmed) return
-    const { data } = await supabase.from('recipe_categories').insert({ name: trimmed }).select().single()
+    const { data } = await supabase.from('recipe_categories').insert({ name: trimmed, household_id: householdId }).select().single()
     if (data) {
       setCategories(prev => [...prev, data].sort((a, b) => a.name.localeCompare(b.name)))
       setCategoryId(data.id)
@@ -248,14 +254,14 @@ function RecipeForm({ recipe, categories: initialCategories, onSave, onCancel }:
       await supabase.from('recipe_ingredients').delete().eq('recipe_id', recipe.id)
       const rows = ingredients.filter(i => i.name?.trim()).map(i => ({ recipe_id: recipe.id, name: i.name!.trim(), quantity: i.quantity ?? null, unit: i.unit ?? null }))
       if (rows.length) await supabase.from('recipe_ingredients').insert(rows)
-      logActivity('updated recipe', 'recipe', name.trim())
+      logActivity('updated recipe', 'recipe', name.trim(), householdId)
     } else {
-      const { data } = await supabase.from('recipes').insert({ name: name.trim(), category_id: categoryId || null }).select().single()
+      const { data } = await supabase.from('recipes').insert({ name: name.trim(), category_id: categoryId || null, household_id: householdId }).select().single()
       if (data) {
         const rows = ingredients.filter(i => i.name?.trim()).map(i => ({ recipe_id: data.id, name: i.name!.trim(), quantity: i.quantity ?? null, unit: i.unit ?? null }))
         if (rows.length) await supabase.from('recipe_ingredients').insert(rows)
       }
-      logActivity('added recipe', 'recipe', name.trim())
+      logActivity('added recipe', 'recipe', name.trim(), householdId)
     }
     setSaving(false)
     onSave()

@@ -11,33 +11,33 @@ import ShoppingList from './pages/ShoppingList'
 import Recipes from './pages/Recipes'
 import Todos from './pages/Todos'
 import Settings from './pages/Settings'
+import HouseholdSetup from './pages/HouseholdSetup'
+import { HouseholdProvider, useHousehold } from './contexts/HouseholdContext'
 import type { Todo } from './types'
 
-export default function App() {
-  const [session, setSession] = useState<Session | null | undefined>(undefined)
+function Spinner() {
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-zinc-950">
+      <div className="w-8 h-8 border-4 border-green-500 border-t-transparent rounded-full animate-spin" />
+    </div>
+  )
+}
+
+function AuthenticatedApp() {
+  const { household, loading } = useHousehold()
   const [overdueTodos, setOverdueTodos] = useState<Todo[]>([])
   const [showOverdue, setShowOverdue] = useState(false)
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => setSession(data.session))
-    const { data: listener } = supabase.auth.onAuthStateChange((_e, s) => {
-      setSession(s)
-      if (s) {
-        upsertProfile(s)
-        checkOverdue()
-      }
-    })
-    return () => listener.subscription.unsubscribe()
-  }, [])
+    if (household) checkOverdue(household.id)
+  }, [household?.id])
 
-  async function upsertProfile(s: Session) {
-    const username = s.user.user_metadata?.username
-    if (!username) return
-    await supabase.from('profiles').upsert({ id: s.user.id, username }, { onConflict: 'id' })
-  }
-
-  async function checkOverdue() {
-    const { data } = await supabase.from('todos').select('*').eq('completed', false)
+  async function checkOverdue(householdId: string) {
+    const { data } = await supabase
+      .from('todos')
+      .select('*')
+      .eq('completed', false)
+      .eq('household_id', householdId)
     const overdue = (data ?? []).filter((t: Todo) => {
       const due = parseISO(t.due_date)
       return isPast(due) && !isToday(due)
@@ -48,21 +48,15 @@ export default function App() {
     }
   }
 
-  if (session === undefined) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-zinc-950">
-        <div className="w-8 h-8 border-4 border-green-500 border-t-transparent rounded-full animate-spin" />
-      </div>
-    )
-  }
+  if (loading) return <Spinner />
 
   return (
-    <BrowserRouter>
+    <>
       <Routes>
-        {!session ? (
+        {!household ? (
           <>
-            <Route path="/login" element={<Login />} />
-            <Route path="*" element={<Navigate to="/login" replace />} />
+            <Route path="/household-setup" element={<HouseholdSetup />} />
+            <Route path="*" element={<Navigate to="/household-setup" replace />} />
           </>
         ) : (
           <>
@@ -105,6 +99,42 @@ export default function App() {
             </button>
           </div>
         </div>
+      )}
+    </>
+  )
+}
+
+export default function App() {
+  const [session, setSession] = useState<Session | null | undefined>(undefined)
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data }) => setSession(data.session))
+    const { data: listener } = supabase.auth.onAuthStateChange((_e, s) => {
+      setSession(s)
+      if (s) upsertProfile(s)
+    })
+    return () => listener.subscription.unsubscribe()
+  }, [])
+
+  async function upsertProfile(s: Session) {
+    const username = s.user.user_metadata?.username
+    if (!username) return
+    await supabase.from('profiles').upsert({ id: s.user.id, username }, { onConflict: 'id' })
+  }
+
+  if (session === undefined) return <Spinner />
+
+  return (
+    <BrowserRouter>
+      {!session ? (
+        <Routes>
+          <Route path="/login" element={<Login />} />
+          <Route path="*" element={<Navigate to="/login" replace />} />
+        </Routes>
+      ) : (
+        <HouseholdProvider>
+          <AuthenticatedApp />
+        </HouseholdProvider>
       )}
     </BrowserRouter>
   )

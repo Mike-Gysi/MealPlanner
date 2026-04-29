@@ -4,6 +4,7 @@ import { format, isToday, isYesterday, parseISO, formatDistanceToNow, difference
 import { supabase } from '../lib/supabase'
 import { fetchRecentActivity, type ActivityItem } from '../lib/activity'
 import { fetchLeaderboard, type LeaderboardData } from '../lib/leaderboard'
+import { useHousehold } from '../contexts/HouseholdContext'
 
 const nav = [
   { to: '/calendar', label: 'Calendar', icon: '📅' },
@@ -149,6 +150,8 @@ export default function Home() {
   const [loadingActivity, setLoadingActivity] = useState(true)
   const [beeDone, setBeeDone] = useState(false)
   const [openGroups, setOpenGroups] = useState<Set<string>>(new Set())
+  const { household } = useHousehold()
+  const householdId = household?.id ?? ''
   const [weeklyLB, setWeeklyLB] = useState<LeaderboardData | null>(null)
   const [upcomingTodos, setUpcomingTodos] = useState<UpcomingTodo[]>([])
   const navigate = useNavigate()
@@ -157,10 +160,13 @@ export default function Home() {
     supabase.auth.getUser().then(({ data }) => {
       setUsername(data.user?.user_metadata?.username ?? '')
     })
-    fetchRecentActivity().then(items => {
+  }, [])
+
+  useEffect(() => {
+    if (!householdId) return
+    fetchRecentActivity(householdId).then(items => {
       setActivity(items)
       setLoadingActivity(false)
-      // open today and yesterday by default
       const keys = new Set(
         items
           .map(i => format(new Date(i.timestamp), 'yyyy-MM-dd'))
@@ -168,11 +174,11 @@ export default function Home() {
       )
       setOpenGroups(keys)
     })
-    fetchLeaderboard('week').then(setWeeklyLB)
-    supabase.from('todos').select('id, name, due_date').eq('completed', false).order('due_date', { ascending: true }).limit(4).then(({ data }) => setUpcomingTodos(data ?? []))
+    fetchLeaderboard('week', householdId).then(setWeeklyLB)
+    supabase.from('todos').select('id, name, due_date').eq('household_id', householdId).eq('completed', false).order('due_date', { ascending: true }).limit(4).then(({ data }) => setUpcomingTodos(data ?? []))
     const channel = supabase.channel('activity-sync')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'activity_log' }, () => {
-        fetchRecentActivity().then(items => {
+        fetchRecentActivity(householdId).then(items => {
           setActivity(items)
           setOpenGroups(prev => {
             const next = new Set(prev)
@@ -183,18 +189,17 @@ export default function Home() {
             return next
           })
         })
-        fetchLeaderboard('week').then(setWeeklyLB)
+        fetchLeaderboard('week', householdId).then(setWeeklyLB)
       })
       .subscribe()
-    // Re-fetch after a short delay to catch activity logged just before navigating here
     const refetch = setTimeout(() => {
-      fetchRecentActivity().then(items => {
+      fetchRecentActivity(householdId).then(items => {
         setActivity(prev => items.length > prev.length ? items : prev)
       })
     }, 1500)
     const t = setTimeout(() => setBeeDone(true), 2000)
     return () => { clearTimeout(t); clearTimeout(refetch); supabase.removeChannel(channel) }
-  }, [])
+  }, [householdId])
 
   function toggleGroup(key: string) {
     setOpenGroups(prev => {

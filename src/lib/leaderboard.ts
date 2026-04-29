@@ -13,7 +13,7 @@ export interface LeaderboardData {
   shopping: UserScore[]
 }
 
-export async function fetchLeaderboard(period: Period): Promise<LeaderboardData> {
+export async function fetchLeaderboard(period: Period, householdId: string): Promise<LeaderboardData> {
   const now = new Date()
   let start: Date
   if (period === 'week') start = startOfWeek(now, { weekStartsOn: 1 })
@@ -23,6 +23,7 @@ export async function fetchLeaderboard(period: Period): Promise<LeaderboardData>
   const { data } = await supabase
     .from('activity_log')
     .select('username, action')
+    .eq('household_id', householdId)
     .gte('created_at', start.toISOString())
 
   const todoCount: Record<string, number> = {}

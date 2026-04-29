@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { logActivity } from '../lib/activity'
+import { useHousehold } from '../contexts/HouseholdContext'
 import type { ShoppingItem, ShoppingHistoryItem } from '../types'
 import { format } from 'date-fns'
 
@@ -12,6 +13,9 @@ interface FrequentItem {
 }
 
 export default function ShoppingList() {
+  const { household } = useHousehold()
+  const householdId = household?.id ?? ''
+
   const [items, setItems] = useState<ShoppingItem[]>([])
   const [history, setHistory] = useState<ShoppingHistoryItem[]>([])
   const [frequent, setFrequent] = useState<FrequentItem[]>([])
@@ -20,20 +24,20 @@ export default function ShoppingList() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
+    if (!householdId) return
     fetchAll()
-    // Real-time sync: refetch whenever any other user changes the shopping tables
     const channel = supabase.channel('shopping-sync')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'shopping_list_items' }, fetchAll)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'shopping_list_history' }, fetchAll)
       .subscribe()
     return () => { supabase.removeChannel(channel) }
-  }, [])
+  }, [householdId])
 
   async function fetchAll() {
     setLoading(true)
     const [{ data: itemsData }, { data: histData }] = await Promise.all([
-      supabase.from('shopping_list_items').select('*').eq('is_purchased', false).order('created_at'),
-      supabase.from('shopping_list_history').select('*').order('purchased_at', { ascending: false }).limit(200),
+      supabase.from('shopping_list_items').select('*').eq('household_id', householdId).eq('is_purchased', false).order('created_at'),
+      supabase.from('shopping_list_history').select('*').eq('household_id', householdId).order('purchased_at', { ascending: false }).limit(200),
     ])
     setItems(itemsData ?? [])
     setHistory(histData ?? [])
@@ -57,21 +61,21 @@ export default function ShoppingList() {
     const parsed = name ? { name: text, quantity: quantity ?? null, unit: unit ?? null } : parseItem(text)
     const { data } = await supabase
       .from('shopping_list_items')
-      .insert({ name: parsed.name, quantity: parsed.quantity, unit: parsed.unit, is_purchased: false })
+      .insert({ name: parsed.name, quantity: parsed.quantity, unit: parsed.unit, is_purchased: false, household_id: householdId })
       .select().single()
     if (data) setItems(prev => [...prev, data])
     if (!name) setInput('')
-    logActivity('added to shopping list', 'shopping', parsed.name)
+    logActivity('added to shopping list', 'shopping', parsed.name, householdId)
   }
 
   async function purchaseItem(item: ShoppingItem) {
     await Promise.all([
       supabase.from('shopping_list_items').delete().eq('id', item.id),
-      supabase.from('shopping_list_history').insert({ name: item.name, quantity: item.quantity, unit: item.unit }),
+      supabase.from('shopping_list_history').insert({ name: item.name, quantity: item.quantity, unit: item.unit, household_id: householdId }),
     ])
-    logActivity('purchased', 'shopping', item.name)
+    logActivity('purchased', 'shopping', item.name, householdId)
     setItems(prev => prev.filter(i => i.id !== item.id))
-    const { data } = await supabase.from('shopping_list_history').select('*').order('purchased_at', { ascending: false }).limit(200)
+    const { data } = await supabase.from('shopping_list_history').select('*').eq('household_id', householdId).order('purchased_at', { ascending: false }).limit(200)
     const hist = data ?? []
     setHistory(hist)
     setFrequent(computeFrequent(hist))
@@ -81,7 +85,7 @@ export default function ShoppingList() {
     const item = items.find(i => i.id === id)
     await supabase.from('shopping_list_items').delete().eq('id', id)
     setItems(prev => prev.filter(i => i.id !== id))
-    if (item) logActivity('removed from shopping list', 'shopping', item.name)
+    if (item) logActivity('removed from shopping list', 'shopping', item.name, householdId)
   }
 
   function parseItem(text: string): { name: string; quantity: number | null; unit: string | null } {

@@ -50,6 +50,24 @@ export interface ShoppingHistoryItem {
 export interface Profile {
   id: string
   username: string
+  household_id: string | null
+}
+
+export interface Household {
+  id: string
+  name: string
+  join_key: string
+  created_by: string | null
+  created_at: string
+}
+
+export interface HouseholdMember {
+  id: string
+  household_id: string
+  user_id: string
+  username: string
+  role: 'admin' | 'member'
+  joined_at: string
 }
 
 export interface Todo {

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { logActivity } from '../lib/activity'
+import { useHousehold } from '../contexts/HouseholdContext'
 import type { Todo, Profile } from '../types'
 import {
   format, isPast, isToday, parseISO,
@@ -33,6 +34,9 @@ function nextDueDate(todo: Todo): string {
 }
 
 export default function Todos() {
+  const { household } = useHousehold()
+  const householdId = household?.id ?? ''
+
   const [todos, setTodos] = useState<Todo[]>([])
   const [profiles, setProfiles] = useState<Profile[]>([])
   const [showForm, setShowForm] = useState(false)
@@ -42,18 +46,19 @@ export default function Todos() {
   const [filterUser, setFilterUser] = useState<string>('all')
 
   useEffect(() => {
+    if (!householdId) return
     fetchAll()
     const channel = supabase.channel('todos-sync')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'todos' }, fetchAll)
       .subscribe()
     return () => { supabase.removeChannel(channel) }
-  }, [])
+  }, [householdId])
 
   async function fetchAll() {
     setLoading(true)
     const [{ data: todosData }, { data: profilesData }] = await Promise.all([
-      supabase.from('todos').select('*').order('due_date'),
-      supabase.from('profiles').select('*'),
+      supabase.from('todos').select('*').eq('household_id', householdId).order('due_date'),
+      supabase.from('profiles').select('*').eq('household_id', householdId),
     ])
     setTodos(todosData ?? [])
     setProfiles(profilesData ?? [])
@@ -62,14 +67,14 @@ export default function Todos() {
 
   async function toggleComplete(todo: Todo) {
     await supabase.from('todos').update({ completed: !todo.completed }).eq('id', todo.id)
-    logActivity(!todo.completed ? 'completed todo' : 'reopened todo', 'todo', todo.name)
-    // If completing a recurring todo, spawn the next occurrence
+    logActivity(!todo.completed ? 'completed todo' : 'reopened todo', 'todo', todo.name, householdId)
     if (!todo.completed && todo.recurring) {
       const { name, assigned_to, recurring, recur_type, recur_interval, recur_week_position, recur_month_day } = todo
       await supabase.from('todos').insert({
         name, assigned_to, recurring, recur_type, recur_interval, recur_week_position, recur_month_day,
         due_date: nextDueDate(todo),
         completed: false,
+        household_id: householdId,
       })
     }
     await fetchAll()
@@ -79,7 +84,7 @@ export default function Todos() {
     const todo = todos.find(t => t.id === id)
     await supabase.from('todos').delete().eq('id', id)
     setTodos(prev => prev.filter(t => t.id !== id))
-    if (todo) logActivity('deleted todo', 'todo', todo.name)
+    if (todo) logActivity('deleted todo', 'todo', todo.name, householdId)
   }
 
   const byUser = (list: Todo[]) => filterUser === 'all'
@@ -105,6 +110,7 @@ export default function Todos() {
         <TodoForm
           profiles={profiles}
           todo={editingTodo ?? undefined}
+          householdId={householdId}
           onSave={async () => { await fetchAll(); setShowForm(false); setEditingTodo(null) }}
           onCancel={() => { setShowForm(false); setEditingTodo(null) }}
         />
@@ -216,11 +222,12 @@ function TodoItem({ todo, onToggle, onDelete, onEdit }: { todo: Todo; onToggle: 
 interface TodoFormProps {
   profiles: Profile[]
   todo?: Todo
+  householdId: string
   onSave: () => void
   onCancel: () => void
 }
 
-function TodoForm({ profiles, todo, onSave, onCancel }: TodoFormProps) {
+function TodoForm({ profiles, todo, householdId, onSave, onCancel }: TodoFormProps) {
   const [name, setName] = useState(todo?.name ?? '')
   const [dueDate, setDueDate] = useState(todo?.due_date ?? '')
   const [assignedTo, setAssignedTo] = useState(todo?.assigned_to ?? 'all')
@@ -246,10 +253,10 @@ function TodoForm({ profiles, todo, onSave, onCancel }: TodoFormProps) {
     }
     if (todo) {
       await supabase.from('todos').update(payload).eq('id', todo.id)
-      logActivity('updated todo', 'todo', payload.name)
+      logActivity('updated todo', 'todo', payload.name, householdId)
     } else {
-      await supabase.from('todos').insert({ ...payload, completed: false })
-      logActivity('added todo', 'todo', payload.name)
+      await supabase.from('todos').insert({ ...payload, completed: false, household_id: householdId })
+      logActivity('added todo', 'todo', payload.name, householdId)
     }
     setSaving(false)
     onSave()

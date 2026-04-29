@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useHousehold } from '../contexts/HouseholdContext'
 import {
   format, startOfMonth, endOfMonth, startOfWeek, endOfWeek,
   eachDayOfInterval, addMonths, addWeeks, addDays,
@@ -34,6 +35,9 @@ function getProfileColor(username: string, profiles: Profile[]): string {
 }
 
 export default function CalendarPage() {
+  const { household } = useHousehold()
+  const householdId = household?.id ?? ''
+
   const [current, setCurrent] = useState(new Date())
   const [view, setView] = useState<ViewMode>('week')
   const [calMode, setCalMode] = useState<'meals' | 'todos'>('meals')
@@ -45,24 +49,28 @@ export default function CalendarPage() {
   const [modal, setModal] = useState<{ date: string; meal: MealType; entry: CalendarEntry | null } | null>(null)
   const [todoPopup, setTodoPopup] = useState<{ type: 'day'; date: Date; todos: Todo[] } | { type: 'todo'; todo: Todo } | null>(null)
 
-  useEffect(() => { fetchEntries(); fetchRecipes(); fetchTodosAndProfiles() }, [])
+  useEffect(() => {
+    if (!householdId) return
+    fetchEntries(); fetchRecipes(); fetchTodosAndProfiles()
+  }, [householdId])
 
   async function fetchEntries() {
     const { data } = await supabase
       .from('calendar_entries')
       .select('*, recipe:recipes(id, name, ingredients:recipe_ingredients(*))')
+      .eq('household_id', householdId)
     setEntries(data ?? [])
   }
 
   async function fetchRecipes() {
-    const { data } = await supabase.from('recipes').select('*, ingredients:recipe_ingredients(*)').order('name')
+    const { data } = await supabase.from('recipes').select('*, ingredients:recipe_ingredients(*)').eq('household_id', householdId).order('name')
     setRecipes(data ?? [])
   }
 
   async function fetchTodosAndProfiles() {
     const [{ data: todosData }, { data: profilesData }] = await Promise.all([
-      supabase.from('todos').select('*').eq('completed', false).order('due_date'),
-      supabase.from('profiles').select('*'),
+      supabase.from('todos').select('*').eq('household_id', householdId).eq('completed', false).order('due_date'),
+      supabase.from('profiles').select('*').eq('household_id', householdId),
     ])
     setTodos(todosData ?? [])
     setProfiles(profilesData ?? [])
@@ -236,6 +244,7 @@ export default function CalendarPage() {
           entry={modal.entry}
           recipes={recipes}
           allEntries={entries}
+          householdId={householdId}
           onClose={() => setModal(null)}
           onSaved={async () => { await fetchEntries(); setModal(null) }}
         />
@@ -664,11 +673,12 @@ interface MealModalProps {
   entry: CalendarEntry | null
   recipes: Recipe[]
   allEntries: CalendarEntry[]
+  householdId: string
   onClose: () => void
   onSaved: () => void
 }
 
-function MealModal({ date, meal, entry, recipes, allEntries, onClose, onSaved }: MealModalProps) {
+function MealModal({ date, meal, entry, recipes, allEntries, householdId, onClose, onSaved }: MealModalProps) {
   const [selectedMeal, setSelectedMeal] = useState<MealType>(meal)
   const [mode, setMode] = useState<'recipe' | 'text'>(entry?.recipe_id ? 'recipe' : 'text')
   const [recipeId, setRecipeId] = useState(entry?.recipe_id ?? '')
@@ -708,10 +718,10 @@ function MealModal({ date, meal, entry, recipes, allEntries, onClose, onSaved }:
       : customText.trim()
     if (entry) {
       await supabase.from('calendar_entries').update(payload).eq('id', entry.id)
-      logActivity('updated meal plan', 'calendar', `${selectedMeal} — ${mealName}`)
+      logActivity('updated meal plan', 'calendar', `${selectedMeal} — ${mealName}`, householdId)
     } else {
-      await supabase.from('calendar_entries').insert(payload)
-      logActivity('planned meal', 'calendar', `${selectedMeal} — ${mealName}`)
+      await supabase.from('calendar_entries').insert({ ...payload, household_id: householdId })
+      logActivity('planned meal', 'calendar', `${selectedMeal} — ${mealName}`, householdId)
     }
     setSaving(false)
     if (addToShopping && mode === 'recipe' && recipeId) {
@@ -738,7 +748,7 @@ function MealModal({ date, meal, entry, recipes, allEntries, onClose, onSaved }:
     const recipe = recipes.find(r => r.id === recipeId)
     if (recipe?.ingredients) {
       const filtered = recipe.ingredients.filter(i => checkedIngredients.has(i.id))
-      if (filtered.length) await mergeIngredientsToShoppingList(filtered)
+      if (filtered.length) await mergeIngredientsToShoppingList(filtered, householdId)
     }
     onSaved()
   }
@@ -747,7 +757,7 @@ function MealModal({ date, meal, entry, recipes, allEntries, onClose, onSaved }:
     if (!entry) return
     const mealName = entry.recipe?.name ?? entry.custom_text ?? 'meal'
     await supabase.from('calendar_entries').delete().eq('id', entry.id)
-    logActivity('removed meal plan', 'calendar', `${entry.meal_type} — ${mealName}`)
+    logActivity('removed meal plan', 'calendar', `${entry.meal_type} — ${mealName}`, householdId)
     onSaved()
   }
 
@@ -891,9 +901,9 @@ function MealModal({ date, meal, entry, recipes, allEntries, onClose, onSaved }:
   )
 }
 
-async function mergeIngredientsToShoppingList(ingredients: RecipeIngredient[]) {
+async function mergeIngredientsToShoppingList(ingredients: RecipeIngredient[], householdId: string) {
   if (!ingredients.length) return
-  const { data: existing } = await supabase.from('shopping_list_items').select('*').eq('is_purchased', false)
+  const { data: existing } = await supabase.from('shopping_list_items').select('*').eq('household_id', householdId).eq('is_purchased', false)
   const existingMap = new Map<string, { id: string; quantity: number | null }>()
   for (const item of existing ?? []) {
     existingMap.set(`${item.name.toLowerCase()}|${item.unit ?? ''}`, item)
@@ -904,7 +914,7 @@ async function mergeIngredientsToShoppingList(ingredients: RecipeIngredient[]) {
     if (match) {
       await supabase.from('shopping_list_items').update({ quantity: (match.quantity ?? 0) + (ing.quantity ?? 0) }).eq('id', match.id)
     } else {
-      await supabase.from('shopping_list_items').insert({ name: ing.name, quantity: ing.quantity, unit: ing.unit, is_purchased: false })
+      await supabase.from('shopping_list_items').insert({ name: ing.name, quantity: ing.quantity, unit: ing.unit, is_purchased: false, household_id: householdId })
     }
   }
 }
