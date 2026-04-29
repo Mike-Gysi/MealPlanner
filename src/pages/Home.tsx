@@ -207,6 +207,29 @@ export default function Home() {
 
   const groups = groupActivity(activity)
 
+  const personalNotices: { icon: string; text: string }[] = []
+  if (weeklyLB && username) {
+    const { todos, shopping } = weeklyLB
+    if (todos.length > 0 && todos[0].username !== username) {
+      const leader = todos[0]
+      const mine = todos.find(s => s.username === username)?.count ?? 0
+      const diff = leader.count - mine
+      personalNotices.push({
+        icon: '🏆',
+        text: `${leader.username} is the current Doer of the Week — you are ${diff} todo${diff === 1 ? '' : 's'} behind`,
+      })
+    }
+    if (shopping.length > 0 && shopping[0].username !== username) {
+      const leader = shopping[0]
+      const mine = shopping.find(s => s.username === username)?.count ?? 0
+      const diff = leader.count - mine
+      personalNotices.push({
+        icon: '👸',
+        text: `${leader.username} is the current Shopping Queen — you are ${diff} item${diff === 1 ? '' : 's'} behind`,
+      })
+    }
+  }
+
   return (
     <>
     <style>{`
@@ -254,6 +277,18 @@ export default function Home() {
           </button>
         ))}
       </div>
+
+      {/* Personal leaderboard notices */}
+      {personalNotices.length > 0 && (
+        <div className="w-full max-w-xs flex flex-col gap-2">
+          {personalNotices.map((n, i) => (
+            <div key={i} className="flex items-start gap-2.5 bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2.5">
+              <span className="text-base flex-shrink-0">{n.icon}</span>
+              <p className="text-xs text-zinc-400 leading-snug">{n.text}</p>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* Upcoming todos */}
       <UpcomingTodos todos={upcomingTodos} />
