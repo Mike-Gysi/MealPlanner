@@ -332,7 +332,7 @@ export default function Settings() {
     if (!currentUserId) return
     supabase.from('notification_preferences')
       .upsert({ user_id: currentUserId, ...updated }, { onConflict: 'user_id' })
-      .then(() => {}).catch(() => {})
+      .then(() => {}, () => {})
   }
 
   const changed = username.trim() !== initial && username.trim() !== ''
