@@ -6,6 +6,11 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    "hash": "ddb0f71",
+    "date": "2026-04-29",
+    "message": "Added push notifications."
+  },
+  {
     "hash": "71dda57",
     "date": "2026-04-29",
     "message": "Bugfix related to newly created house hold section."
