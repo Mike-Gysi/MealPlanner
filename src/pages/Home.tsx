@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { format, isToday, isYesterday, parseISO, formatDistanceToNow } from 'date-fns'
+import { format, isToday, isYesterday, parseISO, formatDistanceToNow, differenceInCalendarDays } from 'date-fns'
 import { supabase } from '../lib/supabase'
 import { fetchRecentActivity, type ActivityItem } from '../lib/activity'
 import { fetchLeaderboard, type LeaderboardData } from '../lib/leaderboard'
@@ -33,6 +33,59 @@ function groupActivity(items: ActivityItem[]): ActivityGroup[] {
       const label = isToday(date) ? 'Today' : isYesterday(date) ? 'Yesterday' : format(date, 'd MMM yyyy')
       return { key, label, items: groupItems }
     })
+}
+
+interface UpcomingTodo {
+  id: string
+  name: string
+  due_date: string
+}
+
+function todoUrgency(dueDate: string): 'overdue' | 'soon' | 'normal' {
+  const days = differenceInCalendarDays(parseISO(dueDate), new Date())
+  if (days < 0) return 'overdue'
+  if (days <= 2) return 'soon'
+  return 'normal'
+}
+
+function UpcomingTodos({ todos }: { todos: UpcomingTodo[] }) {
+  const [open, setOpen] = useState(true)
+
+  if (todos.length === 0) return null
+
+  return (
+    <div className="w-full max-w-xs">
+      <div className="rounded-xl border border-zinc-700/50 overflow-hidden">
+        <button
+          onClick={() => setOpen(o => !o)}
+          className="w-full flex items-center justify-between px-3 py-2 bg-zinc-800 transition-colors"
+        >
+          <span className="text-xs font-semibold text-zinc-300">Upcoming Todos</span>
+          <span className="flex items-center gap-1.5">
+            <span className="text-[10px] text-zinc-600">{todos.length}</span>
+            <span className={`text-zinc-500 text-xs transition-transform duration-200 ${open ? 'rotate-90' : ''}`}>›</span>
+          </span>
+        </button>
+        {open && (
+          <div className="flex flex-col divide-y divide-zinc-700/40">
+            {todos.map(todo => {
+              const urgency = todoUrgency(todo.due_date)
+              const nameColor = urgency === 'overdue' ? 'text-red-400' : urgency === 'soon' ? 'text-orange-400' : 'text-zinc-200'
+              const dateColor = urgency === 'overdue' ? 'text-red-500/60' : urgency === 'soon' ? 'text-orange-500/60' : 'text-zinc-600'
+              const days = differenceInCalendarDays(parseISO(todo.due_date), new Date())
+              const dateLabel = days === 0 ? 'Today' : days === 1 ? 'Tomorrow' : days < 0 ? `${Math.abs(days)}d overdue` : format(parseISO(todo.due_date), 'd MMM')
+              return (
+                <div key={todo.id} className="flex items-center justify-between bg-zinc-800/40 px-3 py-2.5 gap-3">
+                  <span className={`text-xs flex-1 min-w-0 truncate ${nameColor}`}>{todo.name}</span>
+                  <span className={`text-[10px] flex-shrink-0 tabular-nums whitespace-nowrap ${dateColor}`}>{dateLabel}</span>
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  )
 }
 
 function WeeklyLeaderboard({ data }: { data: LeaderboardData }) {
@@ -97,6 +150,7 @@ export default function Home() {
   const [beeDone, setBeeDone] = useState(false)
   const [openGroups, setOpenGroups] = useState<Set<string>>(new Set())
   const [weeklyLB, setWeeklyLB] = useState<LeaderboardData | null>(null)
+  const [upcomingTodos, setUpcomingTodos] = useState<UpcomingTodo[]>([])
   const navigate = useNavigate()
 
   useEffect(() => {
@@ -115,6 +169,7 @@ export default function Home() {
       setOpenGroups(keys)
     })
     fetchLeaderboard('week').then(setWeeklyLB)
+    supabase.from('todos').select('id, name, due_date').eq('completed', false).order('due_date', { ascending: true }).limit(4).then(({ data }) => setUpcomingTodos(data ?? []))
     const channel = supabase.channel('activity-sync')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'activity_log' }, () => {
         fetchRecentActivity().then(items => {
@@ -199,6 +254,9 @@ export default function Home() {
           </button>
         ))}
       </div>
+
+      {/* Upcoming todos */}
+      <UpcomingTodos todos={upcomingTodos} />
 
       {/* Weekly leaderboard */}
       {weeklyLB && <WeeklyLeaderboard data={weeklyLB} />}
