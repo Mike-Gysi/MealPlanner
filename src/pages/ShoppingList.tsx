@@ -149,14 +149,13 @@ export default function ShoppingList() {
                 <p className="text-center text-zinc-600 py-10 text-sm">List is empty.</p>
               )}
               {items.map(item => (
-                <div key={item.id} className="flex items-center gap-3 bg-zinc-900 rounded-xl border border-zinc-800 px-3 py-3 group">
-                  <button
-                    onClick={() => purchaseItem(item)}
-                    className="w-5 h-5 rounded-full border-2 border-zinc-600 hover:border-green-500 hover:bg-green-500/20 flex-shrink-0 transition-all"
-                  />
-                  <span className="flex-1 text-sm text-zinc-200 truncate">{formatItem(item)}</span>
-                  <button onClick={() => deleteItem(item.id)} className="text-zinc-700 hover:text-red-400 text-lg leading-none transition-colors">×</button>
-                </div>
+                <ShoppingListItem
+                  key={item.id}
+                  item={item}
+                  onPurchase={purchaseItem}
+                  onDelete={deleteItem}
+                  formatItem={formatItem}
+                />
               ))}
             </div>
           ) : (
@@ -205,6 +204,50 @@ export default function ShoppingList() {
           </div>
         </div>
       </div>
+    </div>
+  )
+}
+
+function ShoppingListItem({
+  item,
+  onPurchase,
+  onDelete,
+  formatItem,
+}: {
+  item: ShoppingItem
+  onPurchase: (item: ShoppingItem) => void
+  onDelete: (id: string) => void
+  formatItem: (item: { name: string; quantity: number | null; unit: string | null }) => string
+}) {
+  const [pressed, setPressed] = useState(false)
+
+  return (
+    <div
+      className={`flex items-center bg-zinc-900 rounded-xl border transition-colors duration-150 ${
+        pressed ? 'border-green-500/60 bg-green-500/5' : 'border-zinc-800'
+      }`}
+    >
+      <button
+        onPointerDown={() => setPressed(true)}
+        onPointerUp={() => setPressed(false)}
+        onPointerLeave={() => setPressed(false)}
+        onPointerCancel={() => setPressed(false)}
+        onClick={() => onPurchase(item)}
+        className="flex-1 flex items-center gap-3 px-3 py-4 text-left"
+      >
+        <span
+          className={`w-5 h-5 rounded-full border-2 flex-shrink-0 transition-colors duration-150 ${
+            pressed ? 'border-green-500 bg-green-500/20' : 'border-zinc-600'
+          }`}
+        />
+        <span className="flex-1 text-sm text-zinc-200 truncate">{formatItem(item)}</span>
+      </button>
+      <button
+        onClick={() => onDelete(item.id)}
+        className="text-zinc-700 hover:text-red-400 active:text-red-400 text-lg leading-none transition-colors px-4 py-4 flex-shrink-0"
+      >
+        ×
+      </button>
     </div>
   )
 }
