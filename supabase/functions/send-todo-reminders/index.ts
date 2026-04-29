@@ -17,11 +17,13 @@ const TZ = 'Europe/Zurich'
 function zurichParts(date: Date) {
   const parts = new Intl.DateTimeFormat('en', {
     timeZone: TZ,
-    year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', hour12: false,
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', hour12: false,
   }).formatToParts(date)
   const get = (type: string) => parts.find(p => p.type === type)!.value
   return {
     hour: parseInt(get('hour')) % 24, // guard against locale returning "24" for midnight
+    minute: parseInt(get('minute')),
     date: `${get('year')}-${get('month')}-${get('day')}`,
   }
 }
@@ -35,7 +37,7 @@ Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok')
   if (req.method !== 'POST') return new Response('Method not allowed', { status: 405 })
 
-  const { hour: currentHour, date: today } = zurichParts(new Date())
+  const { hour: currentHour, minute: currentMinute, date: today } = zurichParts(new Date())
 
   const date1d = addDays(today, 1)
   const date2d = addDays(today, 2)
@@ -54,11 +56,11 @@ Deno.serve(async (req) => {
 
   if (!prefs?.length) return new Response('ok')
 
-  // Only process users with at least one reminder enabled whose time hour matches Zurich now
+  // Match exact HH:MM so the minute the user set is respected
   const matchingPrefs = prefs.filter(p => {
     if (!p.todo_reminder_1d && !p.todo_reminder_2d && !p.todo_reminder_3d) return false
-    const [h] = p.todo_reminder_time.split(':').map(Number)
-    return h === currentHour
+    const [h, m] = p.todo_reminder_time.split(':').map(Number)
+    return h === currentHour && m === currentMinute
   })
 
   if (!matchingPrefs.length) return new Response('ok')
