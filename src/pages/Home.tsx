@@ -308,7 +308,7 @@ export default function Home() {
           <div className="flex items-center gap-2">
             {activity.length === 0 && !loadingActivity && (
               <button
-                onClick={() => { setLoadingActivity(true); fetchRecentActivity().then(items => { setActivity(items); setLoadingActivity(false) }) }}
+                onClick={() => { setLoadingActivity(true); fetchRecentActivity(householdId).then(items => { setActivity(items); setLoadingActivity(false) }) }}
                 className="text-xs text-green-500 hover:text-green-400 transition-colors"
               >
                 Recover
