@@ -26,6 +26,15 @@ const NOTIFY_ACTIONS: Record<string, (username: string, entityName: string) => {
   'updated meal plan': (u, n) => ({ title: 'Meal Plan', body: `${u} updated: ${n}` }),
 }
 
+const NOTIFY_TYPES: Record<string, 'shopping' | 'todos' | 'meals'> = {
+  'added to shopping list': 'shopping',
+  'purchased': 'shopping',
+  'added todo': 'todos',
+  'completed todo': 'todos',
+  'planned meal': 'meals',
+  'updated meal plan': 'meals',
+}
+
 export function logActivity(
   action: string,
   entityType: string,
@@ -47,7 +56,7 @@ export function logActivity(
     const builder = NOTIFY_ACTIONS[action]
     if (builder) {
       const { title, body } = builder(username, entityName)
-      notifyHousehold(householdId, session.user.id, title, body)
+      notifyHousehold(householdId, session.user.id, title, body, NOTIFY_TYPES[action])
     }
   })
 }

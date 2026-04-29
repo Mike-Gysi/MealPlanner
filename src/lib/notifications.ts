@@ -77,8 +77,9 @@ export function notifyHousehold(
   actorUserId: string,
   title: string,
   body: string,
+  notifType?: 'shopping' | 'todos' | 'meals',
 ): void {
   supabase.functions.invoke('send-push', {
-    body: { householdId, actorUserId, title, body },
+    body: { householdId, actorUserId, title, body, notifType },
   }).catch(() => {})
 }

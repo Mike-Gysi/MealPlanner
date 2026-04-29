@@ -38,15 +38,39 @@ Deno.serve(async (req) => {
     return new Response('Unauthorized', { status: 401 })
   }
 
-  const { householdId, actorUserId, title, body } = await req.json()
+  const { householdId, actorUserId, title, body, notifType } = await req.json()
 
-  const { data: subscriptions } = await supabaseAdmin
+  const { data: rawSubs } = await supabaseAdmin
     .from('push_subscriptions')
-    .select('endpoint, p256dh, auth')
+    .select('endpoint, p256dh, auth, user_id')
     .eq('household_id', householdId)
     .neq('user_id', actorUserId)
 
-  if (!subscriptions?.length) {
+  if (!rawSubs?.length) {
+    return new Response('no subscribers', { headers: corsHeaders })
+  }
+
+  // Filter recipients by their notification type preference
+  let subscriptions = rawSubs
+  if (notifType) {
+    const { data: prefs } = await supabaseAdmin
+      .from('notification_preferences')
+      .select('user_id, notify_shopping, notify_todos, notify_meals')
+      .in('user_id', rawSubs.map(s => s.user_id))
+
+    const prefsMap = new Map(prefs?.map(p => [p.user_id, p]) ?? [])
+
+    subscriptions = rawSubs.filter(sub => {
+      const p = prefsMap.get(sub.user_id)
+      if (!p) return true // no row = all enabled (default)
+      if (notifType === 'shopping') return p.notify_shopping
+      if (notifType === 'todos') return p.notify_todos
+      if (notifType === 'meals') return p.notify_meals
+      return true
+    })
+  }
+
+  if (!subscriptions.length) {
     return new Response('no subscribers', { headers: corsHeaders })
   }
 
