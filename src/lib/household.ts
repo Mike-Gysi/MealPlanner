@@ -289,6 +289,13 @@ export async function importHouseholdData(
   }
 }
 
+export async function regenerateApiKey(householdId: string): Promise<{ apiKey: string | null; error: string | null }> {
+  const apiKey = crypto.randomUUID()
+  const { error } = await supabase.from('households').update({ api_key: apiKey }).eq('id', householdId)
+  if (error) return { apiKey: null, error: error.message }
+  return { apiKey, error: null }
+}
+
 export async function setMemberRole(
   householdId: string,
   userId: string,

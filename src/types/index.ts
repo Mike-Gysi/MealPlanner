@@ -57,6 +57,7 @@ export interface Household {
   id: string
   name: string
   join_key: string
+  api_key: string
   created_by: string | null
   created_at: string
 }

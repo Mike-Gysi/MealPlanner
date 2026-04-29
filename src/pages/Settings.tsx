@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { CHANGELOG } from '../lib/changelog'
 import { fetchLeaderboard, type Period, type UserScore, type LeaderboardData } from '../lib/leaderboard'
-import { createHousehold, joinHousehold, setMemberRole, deleteHousehold, exportHouseholdData, importHouseholdData, type HouseholdExport, type ImportSummary } from '../lib/household'
+import { createHousehold, joinHousehold, setMemberRole, deleteHousehold, exportHouseholdData, importHouseholdData, regenerateApiKey, type HouseholdExport, type ImportSummary } from '../lib/household'
+import { supabaseUrl } from '../lib/supabase'
 import { useHousehold } from '../contexts/HouseholdContext'
 import { format, parseISO } from 'date-fns'
 import type { HouseholdMember } from '../types'
@@ -89,6 +90,10 @@ export default function Settings() {
   const [showDeleteModal, setShowDeleteModal] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [deleteError, setDeleteError] = useState('')
+
+  // Siri shortcut
+  const [copiedKey, setCopiedKey] = useState<'endpoint' | 'apikey' | null>(null)
+  const [regenerating, setRegenerating] = useState(false)
 
   // Export / Import
   const [exporting, setExporting] = useState(false)
@@ -206,6 +211,20 @@ export default function Settings() {
     }
     setShowDeleteModal(false)
     setDeleting(false)
+  }
+
+  async function copyShortcutValue(value: string, which: 'endpoint' | 'apikey') {
+    await navigator.clipboard.writeText(value)
+    setCopiedKey(which)
+    setTimeout(() => setCopiedKey(null), 2000)
+  }
+
+  async function handleRegenerateApiKey() {
+    if (!household) return
+    setRegenerating(true)
+    const { apiKey, error } = await regenerateApiKey(household.id)
+    if (!error && apiKey) await refresh()
+    setRegenerating(false)
   }
 
   async function handleExport() {
@@ -371,6 +390,42 @@ export default function Settings() {
                 </button>
               </div>
               <p className="text-[10px] text-zinc-600 mt-1.5 px-1">Share this key with others so they can join your household.</p>
+            </div>
+
+            {/* Siri Shortcut */}
+            <div>
+              <label className="block text-xs font-medium text-zinc-500 uppercase tracking-wide mb-2">Siri Shortcut</label>
+              <div className="flex flex-col gap-2">
+                {[
+                  { label: 'Endpoint', value: `${supabaseUrl}/functions/v1/add-shopping-item`, which: 'endpoint' as const },
+                  { label: 'API Key', value: household.api_key ?? '—', which: 'apikey' as const },
+                ].map(({ label, value, which }) => (
+                  <div key={which}>
+                    <p className="text-[10px] text-zinc-600 mb-1">{label}</p>
+                    <div className="flex gap-2">
+                      <p className="flex-1 text-xs font-mono text-zinc-400 bg-zinc-800 rounded-xl px-3 py-2 truncate">{value}</p>
+                      <button
+                        onClick={() => copyShortcutValue(value, which)}
+                        className="flex-shrink-0 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 rounded-xl px-3 text-xs text-zinc-400 hover:text-zinc-200 transition-colors"
+                      >
+                        {copiedKey === which ? 'Copied!' : 'Copy'}
+                      </button>
+                    </div>
+                  </div>
+                ))}
+                <p className="text-[10px] text-zinc-600 leading-relaxed mt-1">
+                  In the Shortcuts app, create a shortcut with <span className="text-zinc-400">Get Contents of URL</span> (POST, JSON body: <span className="text-zinc-400">{`{ "item": ..., "key": ... }`}</span>) and add it to Siri.
+                </p>
+                {isAdmin && (
+                  <button
+                    onClick={handleRegenerateApiKey}
+                    disabled={regenerating}
+                    className="self-start text-[11px] text-zinc-600 hover:text-zinc-400 disabled:opacity-40 transition-colors"
+                  >
+                    {regenerating ? 'Regenerating…' : 'Regenerate key'}
+                  </button>
+                )}
+              </div>
             </div>
 
             {/* Members */}
