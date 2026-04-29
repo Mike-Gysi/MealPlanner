@@ -83,6 +83,25 @@ export async function joinHousehold(
   return { error: null }
 }
 
+export async function deleteHousehold(householdId: string): Promise<{ error: string | null }> {
+  // Clear FK on profiles first (no ON DELETE action set)
+  await supabase.from('profiles').update({ household_id: null }).eq('household_id', householdId)
+
+  // Delete all household data in parallel
+  await Promise.all([
+    supabase.from('calendar_entries').delete().eq('household_id', householdId),
+    supabase.from('shopping_list_items').delete().eq('household_id', householdId),
+    supabase.from('shopping_list_history').delete().eq('household_id', householdId),
+    supabase.from('todos').delete().eq('household_id', householdId),
+    supabase.from('activity_log').delete().eq('household_id', householdId),
+    supabase.from('recipes').delete().eq('household_id', householdId),
+  ])
+
+  // Delete household row — cascades to household_members and push_subscriptions
+  const { error } = await supabase.from('households').delete().eq('id', householdId)
+  return { error: error?.message ?? null }
+}
+
 export async function setMemberRole(
   householdId: string,
   userId: string,

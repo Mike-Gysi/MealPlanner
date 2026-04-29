@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { CHANGELOG } from '../lib/changelog'
 import { fetchLeaderboard, type Period, type UserScore, type LeaderboardData } from '../lib/leaderboard'
-import { createHousehold, joinHousehold, setMemberRole } from '../lib/household'
+import { createHousehold, joinHousehold, setMemberRole, deleteHousehold } from '../lib/household'
 import { useHousehold } from '../contexts/HouseholdContext'
 import { format, parseISO } from 'date-fns'
 import type { HouseholdMember } from '../types'
@@ -86,6 +86,9 @@ export default function Settings() {
   const [hhError, setHhError] = useState('')
   const [hhLoading, setHhLoading] = useState(false)
   const [switching, setSwitching] = useState<string | null>(null)
+  const [showDeleteModal, setShowDeleteModal] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+  const [deleteError, setDeleteError] = useState('')
 
   // Leaderboard
   const [period, setPeriod] = useState<Period>('week')
@@ -176,6 +179,26 @@ export default function Settings() {
     setShowJoinHH(false)
     await refresh()
     setHhLoading(false)
+  }
+
+  async function handleDeleteHousehold() {
+    if (!household) return
+    setDeleting(true)
+    setDeleteError('')
+    const { error } = await deleteHousehold(household.id)
+    if (error) {
+      setDeleteError(error)
+      setDeleting(false)
+      return
+    }
+    const others = allHouseholds.filter(m => m.household.id !== household.id)
+    if (others.length > 0) {
+      await switchHousehold(others[0].household.id)
+    } else {
+      await refresh()
+    }
+    setShowDeleteModal(false)
+    setDeleting(false)
   }
 
   async function handleSwitch(id: string) {
@@ -329,6 +352,18 @@ export default function Settings() {
                 ))}
               </div>
             </div>
+
+            {isAdmin && (
+              <>
+                <div className="border-t border-zinc-800" />
+                <button
+                  onClick={() => { setShowDeleteModal(true); setDeleteError('') }}
+                  className="w-full text-sm text-red-400/70 hover:text-red-400 transition-colors text-left"
+                >
+                  Delete this household…
+                </button>
+              </>
+            )}
           </div>
         )}
 
@@ -487,6 +522,50 @@ export default function Settings() {
           Sign out
         </button>
       </div>
+
+      {showDeleteModal && household && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4" onClick={() => !deleting && setShowDeleteModal(false)}>
+          <div className="bg-zinc-900 border border-red-500/30 w-full max-w-sm rounded-2xl shadow-2xl" onClick={e => e.stopPropagation()}>
+            <div className="px-5 py-4 border-b border-zinc-800 flex items-center gap-3">
+              <span className="text-xl leading-none">⚠️</span>
+              <h3 className="font-semibold text-red-400">Delete "{household.name}"?</h3>
+            </div>
+            <div className="p-5 flex flex-col gap-4">
+              <p className="text-sm text-zinc-300 leading-relaxed">
+                This will permanently delete the household and <span className="text-zinc-100 font-medium">all of its data</span> for every member:
+              </p>
+              <ul className="flex flex-col gap-1.5">
+                {['All recipes', 'The entire meal plan', 'Shopping list & history', 'All todos', 'Activity log'].map(item => (
+                  <li key={item} className="flex items-center gap-2 text-sm text-zinc-400">
+                    <span className="w-1 h-1 rounded-full bg-red-500/60 flex-shrink-0" />
+                    {item}
+                  </li>
+                ))}
+              </ul>
+              <p className="text-xs text-zinc-500">This cannot be undone.</p>
+              {deleteError && (
+                <p className="text-red-400 text-xs bg-red-400/10 rounded-lg px-3 py-2">{deleteError}</p>
+              )}
+              <div className="flex gap-2 mt-1">
+                <button
+                  onClick={() => setShowDeleteModal(false)}
+                  disabled={deleting}
+                  className="flex-1 border border-zinc-700 rounded-xl py-2.5 text-sm text-zinc-400 hover:bg-zinc-800 disabled:opacity-30 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleDeleteHousehold}
+                  disabled={deleting}
+                  className="flex-1 bg-red-500 hover:bg-red-400 text-white rounded-xl py-2.5 text-sm font-bold disabled:opacity-40 transition-colors"
+                >
+                  {deleting ? 'Deleting…' : 'Delete everything'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {showChangelog && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4" onClick={() => setShowChangelog(false)}>
