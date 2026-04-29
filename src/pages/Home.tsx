@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { format, isToday, isYesterday, parseISO, formatDistanceToNow } from 'date-fns'
 import { supabase } from '../lib/supabase'
 import { fetchRecentActivity, type ActivityItem } from '../lib/activity'
+import { fetchLeaderboard, type LeaderboardData } from '../lib/leaderboard'
 
 const nav = [
   { to: '/calendar', label: 'Calendar', icon: '📅' },
@@ -34,12 +35,68 @@ function groupActivity(items: ActivityItem[]): ActivityGroup[] {
     })
 }
 
+function WeeklyLeaderboard({ data }: { data: LeaderboardData }) {
+  const categories = [
+    { key: 'todos' as const, icon: '✅', label: 'Todos', award: 'Doer of the Week' },
+    { key: 'shopping' as const, icon: '🛒', label: 'Shopping', award: 'Shopping Queen' },
+  ]
+
+  return (
+    <div className="w-full max-w-xs">
+      <h2 className="text-sm font-semibold text-zinc-500 uppercase tracking-wider mb-3">This Week</h2>
+      <div className="bg-zinc-900 rounded-2xl border border-zinc-800 p-4 grid grid-cols-2 gap-x-4 gap-y-0">
+        {categories.map(({ key, icon, label, award }) => {
+          const scores = data[key]
+          const leader = scores[0]
+          return (
+            <div key={key}>
+              <div className="flex items-center gap-1 mb-2">
+                <span className="text-xs">{icon}</span>
+                <span className="text-xs font-semibold text-zinc-400">{label}</span>
+              </div>
+              {scores.length === 0 ? (
+                <p className="text-[10px] text-zinc-600">No activity yet</p>
+              ) : (
+                <div className="flex flex-col gap-1">
+                  {scores.slice(0, 3).map((s, i) => {
+                    const diff = i === 0 ? null : leader.count - s.count
+                    return (
+                      <div key={s.username} className="flex items-center gap-1 min-w-0">
+                        <span className="text-xs w-4 flex-shrink-0 text-center leading-none">
+                          {i === 0 ? '👑' : <span className="text-[10px] text-zinc-600">{i + 1}</span>}
+                        </span>
+                        <span className={`text-xs truncate flex-1 ${i === 0 ? 'text-zinc-100 font-semibold' : 'text-zinc-500'}`}>
+                          {s.username}
+                        </span>
+                        <span className={`text-xs font-bold tabular-nums flex-shrink-0 ${i === 0 ? 'text-green-400' : 'text-zinc-600'}`}>
+                          {s.count}
+                        </span>
+                        {diff !== null && diff > 0 && (
+                          <span className="text-[10px] text-zinc-700 tabular-nums flex-shrink-0">−{diff}</span>
+                        )}
+                      </div>
+                    )
+                  })}
+                  {scores.length > 0 && (
+                    <p className="text-[10px] text-yellow-600/60 mt-0.5 truncate">{award}</p>
+                  )}
+                </div>
+              )}
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
 export default function Home() {
   const [username, setUsername] = useState('')
   const [activity, setActivity] = useState<ActivityItem[]>([])
   const [loadingActivity, setLoadingActivity] = useState(true)
   const [beeDone, setBeeDone] = useState(false)
   const [openGroups, setOpenGroups] = useState<Set<string>>(new Set())
+  const [weeklyLB, setWeeklyLB] = useState<LeaderboardData | null>(null)
   const navigate = useNavigate()
 
   useEffect(() => {
@@ -53,13 +110,11 @@ export default function Home() {
       const keys = new Set(
         items
           .map(i => format(new Date(i.timestamp), 'yyyy-MM-dd'))
-          .filter(k => {
-            const d = parseISO(k)
-            return isToday(d) || isYesterday(d)
-          })
+          .filter(k => isToday(parseISO(k)))
       )
       setOpenGroups(keys)
     })
+    fetchLeaderboard('week').then(setWeeklyLB)
     const channel = supabase.channel('activity-sync')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'activity_log' }, () => {
         fetchRecentActivity().then(items => {
@@ -68,12 +123,12 @@ export default function Home() {
             const next = new Set(prev)
             for (const item of items) {
               const key = format(new Date(item.timestamp), 'yyyy-MM-dd')
-              const d = parseISO(key)
-              if (isToday(d) || isYesterday(d)) next.add(key)
+              if (isToday(parseISO(key))) next.add(key)
             }
             return next
           })
         })
+        fetchLeaderboard('week').then(setWeeklyLB)
       })
       .subscribe()
     // Re-fetch after a short delay to catch activity logged just before navigating here
@@ -144,6 +199,9 @@ export default function Home() {
           </button>
         ))}
       </div>
+
+      {/* Weekly leaderboard */}
+      {weeklyLB && <WeeklyLeaderboard data={weeklyLB} />}
 
       {/* Recent activity */}
       <div className="w-full max-w-xs">
