@@ -6,6 +6,7 @@ import { createHousehold, joinHousehold, setMemberRole } from '../lib/household'
 import { useHousehold } from '../contexts/HouseholdContext'
 import { format, parseISO } from 'date-fns'
 import type { HouseholdMember } from '../types'
+import { getPermissionState, initNotifications, disableNotifications, isSubscribed, isPushSupported } from '../lib/notifications'
 
 // ── Leaderboard helpers ───────────────────────────────────────────────────────
 
@@ -93,6 +94,11 @@ export default function Settings() {
   // Changelog
   const [showChangelog, setShowChangelog] = useState(false)
 
+  // Notifications
+  const [notifPermission, setNotifPermission] = useState<ReturnType<typeof getPermissionState>>('default')
+  const [notifSubscribed, setNotifSubscribed] = useState(false)
+  const [notifLoading, setNotifLoading] = useState(false)
+
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => {
       const u = data.user
@@ -102,6 +108,8 @@ export default function Settings() {
       setEmail(u?.email ?? '')
       setCurrentUserId(u?.id ?? '')
     })
+    setNotifPermission(getPermissionState())
+    isSubscribed().then(setNotifSubscribed)
   }, [])
 
   useEffect(() => {
@@ -174,6 +182,21 @@ export default function Settings() {
     const newRole = member.role === 'admin' ? 'member' : 'admin'
     await setMemberRole(household.id, member.user_id, newRole)
     await refresh()
+  }
+
+  async function toggleNotifications() {
+    if (!household) return
+    setNotifLoading(true)
+    if (notifSubscribed) {
+      await disableNotifications(currentUserId)
+      setNotifSubscribed(false)
+      setNotifPermission(getPermissionState())
+    } else {
+      const ok = await initNotifications(currentUserId, household.id)
+      if (ok) setNotifSubscribed(true)
+      setNotifPermission(getPermissionState())
+    }
+    setNotifLoading(false)
   }
 
   const changed = username.trim() !== initial && username.trim() !== ''
@@ -329,6 +352,47 @@ export default function Settings() {
           )}
         </div>
       </div>
+
+      {/* ── Notifications ───────────────────────────────────────────────── */}
+      {household && (
+        <div className="flex flex-col gap-3">
+          <h3 className="text-xs font-semibold text-zinc-500 uppercase tracking-wider px-1">Notifications</h3>
+          <div className="bg-zinc-900 rounded-2xl border border-zinc-800 p-5 flex flex-col gap-3">
+            <div className="flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-sm text-zinc-200 font-medium">Push notifications</p>
+                <p className="text-xs text-zinc-500 mt-0.5">Get notified when household members take action</p>
+              </div>
+              {!isPushSupported() ? (
+                <span className="text-xs text-zinc-600 flex-shrink-0">Not supported</span>
+              ) : (
+                <button
+                  onClick={toggleNotifications}
+                  disabled={notifLoading || notifPermission === 'denied'}
+                  className={`flex-shrink-0 w-12 h-6 rounded-full transition-colors relative disabled:opacity-40 ${
+                    notifSubscribed ? 'bg-green-500' : 'bg-zinc-700'
+                  }`}
+                >
+                  {notifLoading ? (
+                    <span className="absolute inset-0 flex items-center justify-center">
+                      <span className="w-3 h-3 border-2 border-zinc-400 border-t-transparent rounded-full animate-spin" />
+                    </span>
+                  ) : (
+                    <span className={`absolute top-1 w-4 h-4 rounded-full bg-white transition-transform ${
+                      notifSubscribed ? 'translate-x-7' : 'translate-x-1'
+                    }`} />
+                  )}
+                </button>
+              )}
+            </div>
+            {notifPermission === 'denied' && (
+              <p className="text-xs text-amber-400/80 bg-amber-500/10 rounded-lg px-3 py-2">
+                Notifications are blocked. Enable them in your browser or phone settings, then try again.
+              </p>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* ── Leaderboard ─────────────────────────────────────────────────── */}
       {household && (

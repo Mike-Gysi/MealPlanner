@@ -1,4 +1,5 @@
 import { supabase } from './supabase'
+import { notifyHousehold } from './notifications'
 
 export interface ActivityItem {
   id: string
@@ -14,6 +15,15 @@ const ICONS: Record<string, string> = {
   shopping: '🛒',
   recipe: '🍽️',
   calendar: '📅',
+}
+
+const NOTIFY_ACTIONS: Record<string, (username: string, entityName: string) => { title: string; body: string }> = {
+  'added to shopping list': (u, n) => ({ title: 'Shopping List', body: `${u} added: ${n}` }),
+  'purchased': (u, n) => ({ title: 'Shopping List', body: `${u} bought: ${n}` }),
+  'added todo': (u, n) => ({ title: 'New Todo', body: `${u} added: ${n}` }),
+  'completed todo': (u, n) => ({ title: 'Todo Done', body: `${u} completed: ${n}` }),
+  'planned meal': (u, n) => ({ title: 'Meal Plan', body: `${u} planned: ${n}` }),
+  'updated meal plan': (u, n) => ({ title: 'Meal Plan', body: `${u} updated: ${n}` }),
 }
 
 export function logActivity(
@@ -33,6 +43,12 @@ export function logActivity(
       entity_name: entityName,
       household_id: householdId,
     })
+
+    const builder = NOTIFY_ACTIONS[action]
+    if (builder) {
+      const { title, body } = builder(username, entityName)
+      notifyHousehold(householdId, session.user.id, title, body)
+    }
   })
 }
 
