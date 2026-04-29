@@ -6,6 +6,11 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    "hash": "25321ab",
+    "date": "2026-04-29",
+    "message": "House holds can now be deleted."
+  },
+  {
     "hash": "07435f9",
     "date": "2026-04-29",
     "message": "Allow being in multiple house holds."

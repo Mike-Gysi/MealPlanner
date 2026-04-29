@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { CHANGELOG } from '../lib/changelog'
 import { fetchLeaderboard, type Period, type UserScore, type LeaderboardData } from '../lib/leaderboard'
-import { createHousehold, joinHousehold, setMemberRole, deleteHousehold } from '../lib/household'
+import { createHousehold, joinHousehold, setMemberRole, deleteHousehold, exportHouseholdData, importHouseholdData, type HouseholdExport, type ImportSummary } from '../lib/household'
 import { useHousehold } from '../contexts/HouseholdContext'
 import { format, parseISO } from 'date-fns'
 import type { HouseholdMember } from '../types'
@@ -89,6 +89,13 @@ export default function Settings() {
   const [showDeleteModal, setShowDeleteModal] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [deleteError, setDeleteError] = useState('')
+
+  // Export / Import
+  const [exporting, setExporting] = useState(false)
+  const [importPreview, setImportPreview] = useState<HouseholdExport | null>(null)
+  const [importError, setImportError] = useState('')
+  const [importing, setImporting] = useState(false)
+  const [importDone, setImportDone] = useState<ImportSummary | null>(null)
 
   // Leaderboard
   const [period, setPeriod] = useState<Period>('week')
@@ -199,6 +206,47 @@ export default function Settings() {
     }
     setShowDeleteModal(false)
     setDeleting(false)
+  }
+
+  async function handleExport() {
+    if (!household) return
+    setExporting(true)
+    await exportHouseholdData(household.id, household.name)
+    setExporting(false)
+  }
+
+  function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    e.target.value = ''
+    const reader = new FileReader()
+    reader.onload = ev => {
+      try {
+        const parsed = JSON.parse(ev.target?.result as string) as HouseholdExport
+        if (parsed.version !== 1) throw new Error('Unsupported file version')
+        if (!Array.isArray(parsed.recipes) || !Array.isArray(parsed.todos)) throw new Error('Invalid file format')
+        setImportPreview(parsed)
+        setImportError('')
+        setImportDone(null)
+      } catch (err) {
+        setImportError((err as Error).message)
+      }
+    }
+    reader.readAsText(file)
+  }
+
+  async function handleImport() {
+    if (!importPreview || !household) return
+    setImporting(true)
+    setImportError('')
+    const { imported, error } = await importHouseholdData(household.id, importPreview)
+    if (error) {
+      setImportError(error)
+    } else {
+      setImportDone(imported)
+      setImportPreview(null)
+    }
+    setImporting(false)
   }
 
   async function handleSwitch(id: string) {
@@ -352,6 +400,34 @@ export default function Settings() {
                 ))}
               </div>
             </div>
+
+            <div className="border-t border-zinc-800" />
+
+            {/* Export / Import */}
+            <div className="flex gap-2">
+              <button
+                onClick={handleExport}
+                disabled={exporting}
+                className="flex-1 flex items-center justify-center gap-1.5 border border-zinc-700 rounded-xl py-2 text-sm text-zinc-400 hover:text-zinc-200 hover:border-zinc-600 disabled:opacity-40 transition-colors"
+              >
+                <span className="text-base leading-none">↓</span>
+                {exporting ? 'Exporting…' : 'Export data'}
+              </button>
+              <label className="flex-1 flex items-center justify-center gap-1.5 border border-zinc-700 rounded-xl py-2 text-sm text-zinc-400 hover:text-zinc-200 hover:border-zinc-600 cursor-pointer transition-colors">
+                <span className="text-base leading-none">↑</span>
+                Import data
+                <input type="file" accept=".json,application/json" onChange={handleFileSelect} className="hidden" />
+              </label>
+            </div>
+
+            {importError && (
+              <p className="text-xs text-red-400 bg-red-400/10 rounded-lg px-3 py-2">{importError}</p>
+            )}
+            {importDone && (
+              <p className="text-xs text-green-400 bg-green-400/10 rounded-lg px-3 py-2">
+                Imported: {importDone.recipes} recipes, {importDone.calendarEntries} meal entries, {importDone.shoppingItems} shopping items, {importDone.todos} todos.
+              </p>
+            )}
 
             {isAdmin && (
               <>
@@ -522,6 +598,57 @@ export default function Settings() {
           Sign out
         </button>
       </div>
+
+      {importPreview && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4" onClick={() => !importing && setImportPreview(null)}>
+          <div className="bg-zinc-900 border border-zinc-700 w-full max-w-sm rounded-2xl shadow-2xl" onClick={e => e.stopPropagation()}>
+            <div className="px-5 py-4 border-b border-zinc-800">
+              <p className="text-[10px] text-zinc-500 uppercase tracking-wide mb-0.5">Importing from</p>
+              <h3 className="font-semibold text-zinc-100">{importPreview.household_name}</h3>
+              <p className="text-xs text-zinc-600 mt-0.5">
+                Exported {new Date(importPreview.exported_at).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })}
+              </p>
+            </div>
+            <div className="p-5 flex flex-col gap-4">
+              <div className="flex flex-col gap-1.5">
+                {[
+                  { label: 'Recipes', count: importPreview.recipes.length },
+                  { label: 'Meal plan entries', count: importPreview.calendar_entries.length },
+                  { label: 'Shopping items', count: importPreview.shopping_list.length },
+                  { label: 'Todos', count: importPreview.todos.length },
+                ].map(({ label, count }) => (
+                  <div key={label} className="flex items-center justify-between bg-zinc-800 rounded-xl px-3 py-2">
+                    <span className="text-sm text-zinc-400">{label}</span>
+                    <span className={`text-sm font-semibold tabular-nums ${count > 0 ? 'text-zinc-100' : 'text-zinc-600'}`}>{count}</span>
+                  </div>
+                ))}
+              </div>
+              <p className="text-xs text-zinc-500 leading-relaxed">
+                This will <span className="text-zinc-300">add</span> to your current household. Existing data will not be replaced or removed.
+              </p>
+              {importError && (
+                <p className="text-xs text-red-400 bg-red-400/10 rounded-lg px-3 py-2">{importError}</p>
+              )}
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setImportPreview(null)}
+                  disabled={importing}
+                  className="flex-1 border border-zinc-700 rounded-xl py-2.5 text-sm text-zinc-400 hover:bg-zinc-800 disabled:opacity-30 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleImport}
+                  disabled={importing}
+                  className="flex-1 bg-green-500 hover:bg-green-400 text-zinc-950 rounded-xl py-2.5 text-sm font-bold disabled:opacity-40 transition-colors"
+                >
+                  {importing ? 'Importing…' : 'Import'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {showDeleteModal && household && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4" onClick={() => !deleting && setShowDeleteModal(false)}>
