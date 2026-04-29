@@ -1,4 +1,26 @@
 import { supabase } from './supabase'
+import type { Household } from '../types'
+
+export interface HouseholdMembership {
+  household: Household
+  role: 'admin' | 'member'
+}
+
+export async function getUserHouseholds(userId: string): Promise<HouseholdMembership[]> {
+  const { data } = await supabase
+    .from('household_members')
+    .select('role, households(*)')
+    .eq('user_id', userId)
+    .order('joined_at')
+  return (data ?? []).map(row => ({
+    household: row.households as unknown as Household,
+    role: row.role as 'admin' | 'member',
+  }))
+}
+
+export async function switchActiveHousehold(householdId: string, userId: string): Promise<void> {
+  await supabase.from('profiles').update({ household_id: householdId }).eq('id', userId)
+}
 
 function generateJoinKey(): string {
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
@@ -10,9 +32,6 @@ export async function createHousehold(
   userId: string,
   username: string,
 ): Promise<{ error: string | null }> {
-  // Remove from any current household first
-  await supabase.from('household_members').delete().eq('user_id', userId)
-
   const join_key = generateJoinKey()
   const { data: household, error: hhErr } = await supabase
     .from('households')
@@ -53,9 +72,6 @@ export async function joinHousehold(
     return { error: 'Invalid invite key — please check and try again.' }
   }
   if (!household) return { error: 'Invalid invite key — please check and try again.' }
-
-  // Remove from any current household first
-  await supabase.from('household_members').delete().eq('user_id', userId)
 
   await supabase.from('household_members').upsert(
     { household_id: household.id, user_id: userId, username, role: 'member' },

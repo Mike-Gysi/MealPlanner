@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
 import { supabase } from '../lib/supabase'
+import { getUserHouseholds, switchActiveHousehold, type HouseholdMembership } from '../lib/household'
 import type { Household, HouseholdMember } from '../types'
 
 interface HouseholdContextValue {
@@ -7,7 +8,9 @@ interface HouseholdContextValue {
   members: HouseholdMember[]
   isAdmin: boolean
   loading: boolean
+  allHouseholds: HouseholdMembership[]
   refresh: () => Promise<void>
+  switchHousehold: (id: string) => Promise<void>
 }
 
 const HouseholdContext = createContext<HouseholdContextValue>({
@@ -15,7 +18,9 @@ const HouseholdContext = createContext<HouseholdContextValue>({
   members: [],
   isAdmin: false,
   loading: true,
+  allHouseholds: [],
   refresh: async () => {},
+  switchHousehold: async () => {},
 })
 
 export function HouseholdProvider({ children }: { children: ReactNode }) {
@@ -23,17 +28,19 @@ export function HouseholdProvider({ children }: { children: ReactNode }) {
   const [members, setMembers] = useState<HouseholdMember[]>([])
   const [isAdmin, setIsAdmin] = useState(false)
   const [loading, setLoading] = useState(true)
+  const [allHouseholds, setAllHouseholds] = useState<HouseholdMembership[]>([])
 
   async function refresh() {
     setLoading(true)
     const { data: { session } } = await supabase.auth.getSession()
-    if (!session) { setHousehold(null); setMembers([]); setIsAdmin(false); setLoading(false); return }
+    if (!session) { setHousehold(null); setMembers([]); setIsAdmin(false); setAllHouseholds([]); setLoading(false); return }
 
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('household_id')
-      .eq('id', session.user.id)
-      .single()
+    const [{ data: profile }, memberships] = await Promise.all([
+      supabase.from('profiles').select('household_id').eq('id', session.user.id).single(),
+      getUserHouseholds(session.user.id),
+    ])
+
+    setAllHouseholds(memberships)
 
     if (!profile?.household_id) {
       setHousehold(null); setMembers([]); setIsAdmin(false); setLoading(false); return
@@ -52,10 +59,17 @@ export function HouseholdProvider({ children }: { children: ReactNode }) {
     setLoading(false)
   }
 
+  async function switchHousehold(id: string) {
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session) return
+    await switchActiveHousehold(id, session.user.id)
+    await refresh()
+  }
+
   useEffect(() => { refresh() }, [])
 
   return (
-    <HouseholdContext.Provider value={{ household, members, isAdmin, loading, refresh }}>
+    <HouseholdContext.Provider value={{ household, members, isAdmin, loading, allHouseholds, refresh, switchHousehold }}>
       {children}
     </HouseholdContext.Provider>
   )

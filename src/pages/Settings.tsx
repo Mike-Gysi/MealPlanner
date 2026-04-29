@@ -66,7 +66,7 @@ function LeaderCategory({ label, award, scores, emptyLabel }: {
 // ── Main component ────────────────────────────────────────────────────────────
 
 export default function Settings() {
-  const { household, members, isAdmin, refresh } = useHousehold()
+  const { household, members, isAdmin, allHouseholds, refresh, switchHousehold } = useHousehold()
 
   // Account
   const [username, setUsername] = useState('')
@@ -85,6 +85,7 @@ export default function Settings() {
   const [hhKey, setHhKey] = useState('')
   const [hhError, setHhError] = useState('')
   const [hhLoading, setHhLoading] = useState(false)
+  const [switching, setSwitching] = useState<string | null>(null)
 
   // Leaderboard
   const [period, setPeriod] = useState<Period>('week')
@@ -177,6 +178,12 @@ export default function Settings() {
     setHhLoading(false)
   }
 
+  async function handleSwitch(id: string) {
+    setSwitching(id)
+    await switchHousehold(id)
+    setSwitching(null)
+  }
+
   async function toggleRole(member: HouseholdMember) {
     if (!household) return
     const newRole = member.role === 'admin' ? 'member' : 'admin'
@@ -241,14 +248,45 @@ export default function Settings() {
       <div className="flex flex-col gap-3">
         <h3 className="text-xs font-semibold text-zinc-500 uppercase tracking-wider px-1">Household</h3>
 
+        {/* Household switcher — shown when user belongs to any household */}
+        {allHouseholds.length > 0 && (
+          <div className="bg-zinc-900 rounded-2xl border border-zinc-800 p-3 flex flex-col gap-1.5">
+            {allHouseholds.map(({ household: hh, role }) => {
+              const isActive = hh.id === household?.id
+              return (
+                <div
+                  key={hh.id}
+                  className={`flex items-center justify-between rounded-xl px-3 py-2.5 ${
+                    isActive ? 'bg-green-500/10 border border-green-500/20' : 'bg-zinc-800'
+                  }`}
+                >
+                  <div className="flex items-center gap-2 min-w-0">
+                    {isActive && <span className="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0" />}
+                    <span className={`text-sm font-medium truncate ${isActive ? 'text-zinc-100' : 'text-zinc-400'}`}>
+                      {hh.name}
+                    </span>
+                    <span className="text-[10px] text-zinc-600 flex-shrink-0 capitalize">{role}</span>
+                  </div>
+                  {isActive ? (
+                    <span className="text-[10px] text-green-500 font-semibold flex-shrink-0">Active</span>
+                  ) : (
+                    <button
+                      onClick={() => handleSwitch(hh.id)}
+                      disabled={switching === hh.id}
+                      className="flex-shrink-0 text-xs text-green-400 border border-green-500/30 rounded-lg px-2.5 py-1 hover:bg-green-500/10 transition-colors disabled:opacity-40"
+                    >
+                      {switching === hh.id ? '…' : 'Switch'}
+                    </button>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        )}
+
+        {/* Active household details */}
         {household && (
           <div className="bg-zinc-900 rounded-2xl border border-zinc-800 p-5 flex flex-col gap-4">
-            {/* Name */}
-            <div>
-              <label className="block text-xs font-medium text-zinc-500 uppercase tracking-wide mb-1.5">Name</label>
-              <p className="text-sm font-semibold text-zinc-100 bg-zinc-800 rounded-xl px-3 py-2.5">{household.name}</p>
-            </div>
-
             {/* Invite key */}
             <div>
               <label className="block text-xs font-medium text-zinc-500 uppercase tracking-wide mb-1.5">Invite Key</label>
