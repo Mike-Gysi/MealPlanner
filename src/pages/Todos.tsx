@@ -180,7 +180,7 @@ export default function Todos() {
           {displayed.map(todo => (
             <Fragment key={todo.id}>
               <div ref={editingTodo?.id === todo.id ? editingTodoRef : null}>
-                <TodoItem todo={todo} onToggle={toggleComplete} onDelete={deleteTodo} onEdit={setEditingTodo} isEditing={editingTodo?.id === todo.id} />
+                <TodoItem todo={todo} onToggle={toggleComplete} onDelete={deleteTodo} onEdit={t => setEditingTodo(prev => prev?.id === t.id ? null : t)} isEditing={editingTodo?.id === todo.id} />
               </div>
               {editingTodo?.id === todo.id && (
                 <TodoForm
