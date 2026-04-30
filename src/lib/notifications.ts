@@ -72,6 +72,18 @@ export async function isSubscribed(): Promise<boolean> {
   return !!subscription
 }
 
+export function notifyUser(
+  recipientUserId: string,
+  actorUserId: string,
+  householdId: string,
+  title: string,
+  body: string,
+): void {
+  supabase.functions.invoke('send-push', {
+    body: { householdId, actorUserId, recipientId: recipientUserId, title, body, notifType: 'messages' },
+  }).catch(() => {})
+}
+
 export function notifyHousehold(
   householdId: string,
   actorUserId: string,

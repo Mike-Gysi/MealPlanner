@@ -7,6 +7,7 @@ interface NotifPrefs {
   notify_shopping: boolean
   notify_todos: boolean
   notify_meals: boolean
+  notify_messages: boolean
   todo_reminder_3d: boolean
   todo_reminder_2d: boolean
   todo_reminder_1d: boolean
@@ -17,6 +18,7 @@ const DEFAULT_PREFS: NotifPrefs = {
   notify_shopping: true,
   notify_todos: true,
   notify_meals: true,
+  notify_messages: true,
   todo_reminder_3d: false,
   todo_reminder_2d: false,
   todo_reminder_1d: false,
@@ -45,7 +47,7 @@ export default function NotificationsPage() {
       .select('*')
       .eq('user_id', currentUserId)
       .maybeSingle()
-      .then(({ data }) => { if (data) setNotifPrefs(data) })
+      .then(({ data }) => { if (data) setNotifPrefs({ ...DEFAULT_PREFS, ...data }) })
   }, [currentUserId])
 
   async function toggleNotifications() {
@@ -121,9 +123,10 @@ export default function NotificationsPage() {
             <div className="flex flex-col gap-3">
               <p className="text-xs font-medium text-zinc-500 uppercase tracking-wide">Notify me about</p>
               {([
-                { key: 'notify_shopping', label: 'Shopping list', icon: '🛒' },
-                { key: 'notify_todos',    label: 'Todos',          icon: '✅' },
-                { key: 'notify_meals',    label: 'Meal plan',      icon: '📅' },
+                { key: 'notify_shopping',  label: 'Shopping list', icon: '🛒' },
+                { key: 'notify_todos',     label: 'Todos',          icon: '✅' },
+                { key: 'notify_meals',     label: 'Meal plan',      icon: '📅' },
+                { key: 'notify_messages',  label: 'Messages',       icon: '💬' },
               ] as { key: keyof NotifPrefs; label: string; icon: string }[]).map(({ key, label, icon }) => (
                 <div key={key} className="flex items-center justify-between">
                   <span className="text-sm text-zinc-300 flex items-center gap-2">

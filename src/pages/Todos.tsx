@@ -1,6 +1,7 @@
-import { Fragment, useEffect, useState } from 'react'
+import { Fragment, useEffect, useRef, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { logActivity } from '../lib/activity'
+import { notifyUser } from '../lib/notifications'
 import { useHousehold } from '../contexts/HouseholdContext'
 import type { Todo, Profile } from '../types'
 import {
@@ -252,6 +253,66 @@ function TodoForm({ profiles, todo, householdId, onSave, onCancel }: TodoFormPro
   const [note, setNote] = useState(todo?.note ?? '')
   const [saving, setSaving] = useState(false)
 
+  // @mention autocomplete
+  const [mention, setMention] = useState<{ field: 'name' | 'note'; query: string; start: number } | null>(null)
+  const nameRef = useRef<HTMLInputElement>(null)
+  const noteRef = useRef<HTMLTextAreaElement>(null)
+
+  function detectMention(text: string, cursor: number, field: 'name' | 'note') {
+    const before = text.slice(0, cursor)
+    const match = before.match(/@(\w*)$/)
+    if (match) {
+      setMention({ field, query: match[1], start: before.lastIndexOf('@') })
+    } else {
+      setMention(null)
+    }
+  }
+
+  function handleNameChange(e: React.ChangeEvent<HTMLInputElement>) {
+    setName(e.target.value)
+    detectMention(e.target.value, e.target.selectionStart ?? e.target.value.length, 'name')
+  }
+
+  function handleNoteChange(e: React.ChangeEvent<HTMLTextAreaElement>) {
+    setNote(e.target.value)
+    detectMention(e.target.value, e.target.selectionStart ?? e.target.value.length, 'note')
+  }
+
+  function selectMention(username: string) {
+    if (!mention) return
+    const insert = `@${username} `
+    const end = mention.start + 1 + mention.query.length
+    if (mention.field === 'name') {
+      const next = name.slice(0, mention.start) + insert + name.slice(end)
+      setName(next)
+      setTimeout(() => {
+        nameRef.current?.focus()
+        const pos = mention.start + insert.length
+        nameRef.current?.setSelectionRange(pos, pos)
+      }, 0)
+    } else {
+      const next = note.slice(0, mention.start) + insert + note.slice(end)
+      setNote(next)
+      setTimeout(() => {
+        noteRef.current?.focus()
+        const pos = mention.start + insert.length
+        noteRef.current?.setSelectionRange(pos, pos)
+      }, 0)
+    }
+    setMention(null)
+  }
+
+  function handleMentionKeyDown(e: React.KeyboardEvent) {
+    if (mention && e.key === 'Escape') {
+      e.preventDefault()
+      setMention(null)
+    }
+  }
+
+  const mentionSuggestions = mention
+    ? profiles.filter(p => p.username.toLowerCase().startsWith(mention.query.toLowerCase()))
+    : []
+
   async function save() {
     if (!name.trim() || !dueDate) return
     setSaving(true)
@@ -273,8 +334,37 @@ function TodoForm({ profiles, todo, householdId, onSave, onCancel }: TodoFormPro
       await supabase.from('todos').insert({ ...payload, completed: false, household_id: householdId })
       logActivity('added todo', 'todo', payload.name, householdId)
     }
+
+    // Handle @mentions — create a message for each mentioned household member
+    const mentionedUsernames = extractMentions(`${payload.name} ${note}`)
+    if (mentionedUsernames.length > 0) {
+      const { data: { user } } = await supabase.auth.getUser()
+      const senderId = user?.id ?? ''
+      const senderUsername = user?.user_metadata?.username ?? ''
+      for (const mentioned of mentionedUsernames) {
+        const profile = profiles.find(p => p.username.toLowerCase() === mentioned.toLowerCase())
+        if (profile && profile.id !== senderId) {
+          await supabase.from('messages').insert({
+            household_id: householdId,
+            sender_id: senderId,
+            sender_username: senderUsername,
+            recipient_id: profile.id,
+            recipient_username: profile.username,
+            body: `You were mentioned in a todo: "${payload.name}"`,
+            read: false,
+          })
+          notifyUser(profile.id, senderId, householdId, `${senderUsername} mentioned you`, `In todo: "${payload.name}"`)
+        }
+      }
+    }
+
     setSaving(false)
     onSave()
+  }
+
+  function extractMentions(text: string): string[] {
+    const matches = text.match(/@(\w+)/g) ?? []
+    return [...new Set(matches.map(m => m.slice(1)))]
   }
 
   const inputClass = "w-full bg-zinc-800 border border-zinc-700 rounded-xl px-3 py-2.5 text-sm text-zinc-100 placeholder-zinc-600 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all"
@@ -283,7 +373,17 @@ function TodoForm({ profiles, todo, householdId, onSave, onCancel }: TodoFormPro
     <div className="bg-zinc-900 border border-zinc-700 rounded-xl p-4 mb-4 flex flex-col gap-3">
       <h3 className="font-semibold text-zinc-100">{todo ? 'Edit Todo' : 'New Todo'}</h3>
 
-      <input value={name} onChange={e => setName(e.target.value)} placeholder="What needs to be done?" className={inputClass} />
+      <input
+        ref={nameRef}
+        value={name}
+        onChange={handleNameChange}
+        onKeyDown={handleMentionKeyDown}
+        placeholder="What needs to be done? Use @name to mention"
+        className={inputClass}
+      />
+      {mention?.field === 'name' && mentionSuggestions.length > 0 && (
+        <MentionSuggestions suggestions={mentionSuggestions} onSelect={selectMention} />
+      )}
 
       <div>
         <label className="block text-xs text-zinc-500 uppercase tracking-wide mb-1.5">Due date</label>
@@ -301,12 +401,17 @@ function TodoForm({ profiles, todo, householdId, onSave, onCancel }: TodoFormPro
       <div>
         <label className="block text-xs text-zinc-500 uppercase tracking-wide mb-1.5">Note</label>
         <textarea
+          ref={noteRef}
           value={note}
-          onChange={e => setNote(e.target.value)}
-          placeholder="Add a note…"
+          onChange={handleNoteChange}
+          onKeyDown={handleMentionKeyDown}
+          placeholder="Add a note… Use @name to mention"
           rows={2}
           className={`${inputClass} resize-none`}
         />
+        {mention?.field === 'note' && mentionSuggestions.length > 0 && (
+          <MentionSuggestions suggestions={mentionSuggestions} onSelect={selectMention} />
+        )}
       </div>
 
       {/* Recurring toggle */}
@@ -407,6 +512,27 @@ function TodoForm({ profiles, todo, householdId, onSave, onCancel }: TodoFormPro
           Cancel
         </button>
       </div>
+    </div>
+  )
+}
+
+function MentionSuggestions({ suggestions, onSelect }: { suggestions: { id: string; username: string }[]; onSelect: (username: string) => void }) {
+  return (
+    <div className="bg-zinc-800 border border-zinc-700 rounded-xl overflow-hidden -mt-1">
+      {suggestions.map(p => (
+        <button
+          key={p.id}
+          type="button"
+          onMouseDown={e => { e.preventDefault(); onSelect(p.username) }}
+          onTouchStart={e => { e.preventDefault(); onSelect(p.username) }}
+          className="w-full flex items-center gap-2.5 px-3 py-2.5 hover:bg-zinc-700 active:bg-zinc-600 transition-colors text-left"
+        >
+          <span className="w-6 h-6 rounded-full bg-green-500/20 border border-green-500/30 flex items-center justify-center flex-shrink-0 text-[11px] font-bold text-green-400">
+            {p.username[0].toUpperCase()}
+          </span>
+          <span className="text-sm text-zinc-200">@{p.username}</span>
+        </button>
+      ))}
     </div>
   )
 }

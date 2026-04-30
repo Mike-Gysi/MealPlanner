@@ -38,13 +38,20 @@ Deno.serve(async (req) => {
     return new Response('Unauthorized', { status: 401 })
   }
 
-  const { householdId, actorUserId, title, body, notifType } = await req.json()
+  const { householdId, actorUserId, recipientId, title, body, notifType } = await req.json()
 
-  const { data: rawSubs } = await supabaseAdmin
+  // If recipientId is given, target that user directly; otherwise broadcast to household
+  let rawSubsQuery = supabaseAdmin
     .from('push_subscriptions')
     .select('endpoint, p256dh, auth, user_id')
-    .eq('household_id', householdId)
-    .neq('user_id', actorUserId)
+
+  if (recipientId) {
+    rawSubsQuery = rawSubsQuery.eq('user_id', recipientId)
+  } else {
+    rawSubsQuery = rawSubsQuery.eq('household_id', householdId).neq('user_id', actorUserId)
+  }
+
+  const { data: rawSubs } = await rawSubsQuery
 
   if (!rawSubs?.length) {
     return new Response('no subscribers', { headers: corsHeaders })
@@ -55,7 +62,7 @@ Deno.serve(async (req) => {
   if (notifType) {
     const { data: prefs } = await supabaseAdmin
       .from('notification_preferences')
-      .select('user_id, notify_shopping, notify_todos, notify_meals')
+      .select('user_id, notify_shopping, notify_todos, notify_meals, notify_messages')
       .in('user_id', rawSubs.map(s => s.user_id))
 
     const prefsMap = new Map(prefs?.map(p => [p.user_id, p]) ?? [])
@@ -66,6 +73,7 @@ Deno.serve(async (req) => {
       if (notifType === 'shopping') return p.notify_shopping
       if (notifType === 'todos') return p.notify_todos
       if (notifType === 'meals') return p.notify_meals
+      if (notifType === 'messages') return p.notify_messages !== false
       return true
     })
   }
