@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { logActivity } from '../lib/activity'
 import { useHousehold } from '../contexts/HouseholdContext'
@@ -86,6 +86,12 @@ export default function ShoppingList() {
     await supabase.from('shopping_list_items').delete().eq('id', id)
     setItems(prev => prev.filter(i => i.id !== id))
     if (item) logActivity('removed from shopping list', 'shopping', item.name, householdId)
+  }
+
+  async function removeFromFrequent(name: string) {
+    setFrequent(prev => prev.filter(i => i.name.toLowerCase() !== name.toLowerCase()))
+    await supabase.from('shopping_list_history').delete().eq('household_id', householdId).ilike('name', name)
+    setHistory(prev => prev.filter(i => i.name.toLowerCase() !== name.toLowerCase()))
   }
 
   function parseItem(text: string): { name: string; quantity: number | null; unit: string | null } {
@@ -184,25 +190,91 @@ export default function ShoppingList() {
                 {frequent.map(item => {
                   const inList = alreadyInList.has(item.name.toLowerCase())
                   return (
-                    <button
+                    <SwipeableFrequentItem
                       key={item.name}
-                      onClick={() => !inList && addItem(item.name, item.quantity, item.unit)}
-                      disabled={inList}
-                      className={`w-full text-left rounded-lg px-2 py-1.5 text-xs transition-colors ${
-                        inList
-                          ? 'text-zinc-700 cursor-default'
-                          : 'text-zinc-300 hover:bg-zinc-800 hover:text-green-400'
-                      }`}
-                    >
-                      <span className="truncate block">{item.name}</span>
-                      <span className={`text-[10px] ${inList ? 'text-zinc-700' : 'text-zinc-600'}`}>×{item.count}</span>
-                    </button>
+                      item={item}
+                      inList={inList}
+                      onAdd={() => addItem(item.name, item.quantity, item.unit)}
+                      onRemove={() => removeFromFrequent(item.name)}
+                    />
                   )
                 })}
               </div>
             )}
           </div>
         </div>
+      </div>
+    </div>
+  )
+}
+
+function SwipeableFrequentItem({
+  item,
+  inList,
+  onAdd,
+  onRemove,
+}: {
+  item: FrequentItem
+  inList: boolean
+  onAdd: () => void
+  onRemove: () => void
+}) {
+  const [offsetX, setOffsetX] = useState(0)
+  const startXRef = useRef(0)
+  const movedRef = useRef(false)
+  const THRESHOLD = 60
+
+  function onTouchStart(e: React.TouchEvent) {
+    startXRef.current = e.touches[0].clientX
+    movedRef.current = false
+  }
+
+  function onTouchMove(e: React.TouchEvent) {
+    const delta = e.touches[0].clientX - startXRef.current
+    if (delta < -4) {
+      movedRef.current = true
+      setOffsetX(Math.max(delta, -(THRESHOLD + 20)))
+    }
+  }
+
+  function onTouchEnd() {
+    if (offsetX <= -THRESHOLD) {
+      onRemove()
+    }
+    setOffsetX(0)
+  }
+
+  function handleClick() {
+    if (movedRef.current) return
+    if (!inList) onAdd()
+  }
+
+  const progress = Math.min(1, Math.abs(offsetX) / THRESHOLD)
+
+  return (
+    <div className="relative overflow-hidden rounded-lg">
+      <div
+        className="absolute inset-0 rounded-lg flex items-center justify-end pr-2"
+        style={{ backgroundColor: `rgba(239,68,68,${0.08 + progress * 0.28})` }}
+      >
+        <span className="text-red-400 text-[10px] font-semibold">Remove</span>
+      </div>
+      <div
+        style={{
+          transform: `translateX(${offsetX}px)`,
+          transition: offsetX === 0 ? 'transform 0.2s ease' : 'none',
+          touchAction: 'pan-y',
+        }}
+        onTouchStart={onTouchStart}
+        onTouchMove={onTouchMove}
+        onTouchEnd={onTouchEnd}
+        onClick={handleClick}
+        className={`relative bg-zinc-900 rounded-lg px-2 py-1.5 text-xs select-none ${
+          inList ? 'text-zinc-700' : 'text-zinc-300 active:bg-zinc-800'
+        }`}
+      >
+        <span className="truncate block">{item.name}</span>
+        <span className={`text-[10px] ${inList ? 'text-zinc-700' : 'text-zinc-600'}`}>×{item.count}</span>
       </div>
     </div>
   )
