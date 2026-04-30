@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Outlet, NavLink, useNavigate } from 'react-router-dom'
+import { Outlet, NavLink, useNavigate, useLocation } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 
 const nav = [
@@ -21,6 +21,7 @@ export default function Layout() {
   const [username, setUsername] = useState('')
   const [menuOpen, setMenuOpen] = useState(false)
   const navigate = useNavigate()
+  const location = useLocation()
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => {
@@ -67,21 +68,46 @@ export default function Layout() {
       </main>
 
       <nav className="fixed bottom-0 left-0 right-0 bg-zinc-900 border-t border-zinc-800 flex z-40 bottom-nav">
-        {nav.map(({ to, label, icon }) => (
-          <NavLink
-            key={to}
-            to={to}
-            end={to === '/'}
-            className={({ isActive }) =>
-              `flex-1 flex flex-col items-center py-2.5 text-xs gap-0.5 transition-colors ${
-                isActive ? 'text-green-400 font-semibold' : 'text-zinc-500'
-              }`
-            }
-          >
-            <span className="text-xl leading-none">{icon}</span>
-            {label}
-          </NavLink>
-        ))}
+        {nav.map(({ to, label, icon }) => {
+          if (to === '/calendar') {
+            const isActive = location.pathname === '/calendar'
+            const calMode = new URLSearchParams(location.search).get('mode') ?? 'meals'
+            const isTodos = calMode === 'todos'
+            return (
+              <button
+                key={to}
+                onClick={() => {
+                  if (isActive) {
+                    navigate(`/calendar?mode=${isTodos ? 'meals' : 'todos'}`)
+                  } else {
+                    navigate('/calendar')
+                  }
+                }}
+                className={`flex-1 flex flex-col items-center py-2.5 text-xs gap-0.5 transition-colors ${
+                  isActive ? 'text-green-400 font-semibold' : 'text-zinc-500'
+                }`}
+              >
+                <span className="text-xl leading-none">{isActive && isTodos ? '✅' : icon}</span>
+                {isActive ? (isTodos ? 'Todos Cal' : 'Meals Cal') : label}
+              </button>
+            )
+          }
+          return (
+            <NavLink
+              key={to}
+              to={to}
+              end={to === '/'}
+              className={({ isActive }) =>
+                `flex-1 flex flex-col items-center py-2.5 text-xs gap-0.5 transition-colors ${
+                  isActive ? 'text-green-400 font-semibold' : 'text-zinc-500'
+                }`
+              }
+            >
+              <span className="text-xl leading-none">{icon}</span>
+              {label}
+            </NavLink>
+          )
+        })}
       </nav>
 
       {/* Burger menu overlay */}

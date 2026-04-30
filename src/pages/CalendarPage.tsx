@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { useHousehold } from '../contexts/HouseholdContext'
 import {
   format, startOfMonth, endOfMonth, startOfWeek, endOfWeek,
@@ -38,9 +39,15 @@ export default function CalendarPage() {
   const { household } = useHousehold()
   const householdId = household?.id ?? ''
 
+  const [searchParams, setSearchParams] = useSearchParams()
+  const calMode = (searchParams.get('mode') ?? 'meals') as 'meals' | 'todos'
+
+  function setCalMode(mode: 'meals' | 'todos') {
+    setSearchParams(prev => { const n = new URLSearchParams(prev); n.set('mode', mode); return n })
+  }
+
   const [current, setCurrent] = useState(new Date())
   const [view, setView] = useState<ViewMode>('week')
-  const [calMode, setCalMode] = useState<'meals' | 'todos'>('meals')
   const [entries, setEntries] = useState<CalendarEntry[]>([])
   const [recipes, setRecipes] = useState<Recipe[]>([])
   const [todos, setTodos] = useState<Todo[]>([])
