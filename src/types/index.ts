@@ -83,4 +83,5 @@ export interface Todo {
   recur_interval: number | null
   recur_week_position: 'start' | 'middle' | 'end' | null
   recur_month_day: number | null
+  note: string | null
 }

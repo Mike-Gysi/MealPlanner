@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { Fragment, useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { logActivity } from '../lib/activity'
 import { useHousehold } from '../contexts/HouseholdContext'
@@ -106,13 +106,12 @@ export default function Todos() {
         </button>
       </div>
 
-      {(showForm || editingTodo) && (
+      {showForm && (
         <TodoForm
           profiles={profiles}
-          todo={editingTodo ?? undefined}
           householdId={householdId}
-          onSave={async () => { await fetchAll(); setShowForm(false); setEditingTodo(null) }}
-          onCancel={() => { setShowForm(false); setEditingTodo(null) }}
+          onSave={async () => { await fetchAll(); setShowForm(false) }}
+          onCancel={() => setShowForm(false)}
         />
       )}
 
@@ -156,7 +155,18 @@ export default function Todos() {
       ) : (
         <div className="flex flex-col gap-2">
           {displayed.map(todo => (
-            <TodoItem key={todo.id} todo={todo} onToggle={toggleComplete} onDelete={deleteTodo} onEdit={setEditingTodo} />
+            <Fragment key={todo.id}>
+              <TodoItem todo={todo} onToggle={toggleComplete} onDelete={deleteTodo} onEdit={setEditingTodo} isEditing={editingTodo?.id === todo.id} />
+              {editingTodo?.id === todo.id && (
+                <TodoForm
+                  profiles={profiles}
+                  todo={editingTodo}
+                  householdId={householdId}
+                  onSave={async () => { await fetchAll(); setEditingTodo(null) }}
+                  onCancel={() => setEditingTodo(null)}
+                />
+              )}
+            </Fragment>
           ))}
         </div>
       )}
@@ -180,7 +190,7 @@ function recurLabel(todo: Todo): string {
   return ''
 }
 
-function TodoItem({ todo, onToggle, onDelete, onEdit }: { todo: Todo; onToggle: (t: Todo) => void; onDelete: (id: string) => void; onEdit: (t: Todo) => void }) {
+function TodoItem({ todo, onToggle, onDelete, onEdit, isEditing }: { todo: Todo; onToggle: (t: Todo) => void; onDelete: (id: string) => void; onEdit: (t: Todo) => void; isEditing: boolean }) {
   const due = parseISO(todo.due_date)
   const overdue = !todo.completed && isPast(due) && !isToday(due)
   const dueToday = !todo.completed && isToday(due)
@@ -188,7 +198,7 @@ function TodoItem({ todo, onToggle, onDelete, onEdit }: { todo: Todo; onToggle: 
 
   return (
     <div className={`bg-zinc-900 rounded-xl border px-4 py-3 flex items-start gap-3 ${
-      overdue ? 'border-red-500/40' : 'border-zinc-800'
+      isEditing ? 'border-green-500/40' : overdue ? 'border-red-500/40' : 'border-zinc-800'
     }`}>
       <button
         onClick={() => onToggle(todo)}
@@ -213,6 +223,9 @@ function TodoItem({ todo, onToggle, onDelete, onEdit }: { todo: Todo; onToggle: 
             </>
           )}
         </div>
+        {todo.note && (
+          <p className="text-xs text-zinc-500 mt-1.5 leading-snug line-clamp-2">{todo.note}</p>
+        )}
       </button>
       <button onClick={() => onDelete(todo.id)} className="text-zinc-700 hover:text-red-400 text-lg leading-none transition-colors flex-shrink-0">×</button>
     </div>
@@ -236,6 +249,7 @@ function TodoForm({ profiles, todo, householdId, onSave, onCancel }: TodoFormPro
   const [recurInterval, setRecurInterval] = useState(todo?.recur_interval ?? 1)
   const [weekPosition, setWeekPosition] = useState<'start' | 'middle' | 'end'>((todo?.recur_week_position as 'start' | 'middle' | 'end') ?? 'end')
   const [monthDay, setMonthDay] = useState(todo?.recur_month_day ?? 1)
+  const [note, setNote] = useState(todo?.note ?? '')
   const [saving, setSaving] = useState(false)
 
   async function save() {
@@ -250,6 +264,7 @@ function TodoForm({ profiles, todo, householdId, onSave, onCancel }: TodoFormPro
       recur_interval: recurring ? (isNaN(recurInterval) || recurInterval < 1 ? 1 : recurInterval) : null,
       recur_week_position: recurring && recurType === 'weekly' ? weekPosition : null,
       recur_month_day: recurring && recurType === 'monthly' ? monthDay : null,
+      note: note.trim() || null,
     }
     if (todo) {
       await supabase.from('todos').update(payload).eq('id', todo.id)
@@ -281,6 +296,17 @@ function TodoForm({ profiles, todo, householdId, onSave, onCancel }: TodoFormPro
           <option value="all">Everyone</option>
           {profiles.map(p => <option key={p.id} value={p.username}>{p.username}</option>)}
         </select>
+      </div>
+
+      <div>
+        <label className="block text-xs text-zinc-500 uppercase tracking-wide mb-1.5">Note</label>
+        <textarea
+          value={note}
+          onChange={e => setNote(e.target.value)}
+          placeholder="Add a note…"
+          rows={2}
+          className={`${inputClass} resize-none`}
+        />
       </div>
 
       {/* Recurring toggle */}
