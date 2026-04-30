@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useHousehold } from '../contexts/HouseholdContext'
 import { notifyUser } from '../lib/notifications'
@@ -15,9 +16,11 @@ interface Message {
   body: string
   read: boolean
   created_at: string
+  todo_id?: string | null
 }
 
 export default function MessagesPage() {
+  const navigate = useNavigate()
   const { household, members } = useHousehold()
   const [allMessages, setAllMessages] = useState<Message[]>([])
   const [loading, setLoading] = useState(true)
@@ -221,15 +224,31 @@ export default function MessagesPage() {
                   </p>
                 )}
                 <div className={`flex ${isMine ? 'justify-end' : 'justify-start'}`}>
-                  <div
-                    className={`max-w-[75%] rounded-2xl px-3.5 py-2.5 ${
-                      isMine
-                        ? 'bg-green-500 text-zinc-950 rounded-br-sm'
-                        : 'bg-zinc-800 text-zinc-100 rounded-bl-sm'
-                    }`}
-                  >
-                    <p className="text-sm leading-snug whitespace-pre-wrap break-words">{msg.body}</p>
-                  </div>
+                  {msg.todo_id ? (
+                    <button
+                      onClick={() => navigate(`/todos?edit=${msg.todo_id}`)}
+                      className={`max-w-[75%] rounded-2xl px-3.5 py-2.5 text-left transition-colors ${
+                        isMine
+                          ? 'bg-green-500 hover:bg-green-400 text-zinc-950 rounded-br-sm'
+                          : 'bg-zinc-800 hover:bg-zinc-700 text-zinc-100 rounded-bl-sm'
+                      }`}
+                    >
+                      <p className="text-sm leading-snug whitespace-pre-wrap break-words">{msg.body}</p>
+                      <p className={`text-xs mt-1.5 font-medium flex items-center gap-1 ${isMine ? 'text-zinc-900/70' : 'text-green-400'}`}>
+                        <span>→</span> Open todo
+                      </p>
+                    </button>
+                  ) : (
+                    <div
+                      className={`max-w-[75%] rounded-2xl px-3.5 py-2.5 ${
+                        isMine
+                          ? 'bg-green-500 text-zinc-950 rounded-br-sm'
+                          : 'bg-zinc-800 text-zinc-100 rounded-bl-sm'
+                      }`}
+                    >
+                      <p className="text-sm leading-snug whitespace-pre-wrap break-words">{msg.body}</p>
+                    </div>
+                  )}
                 </div>
               </div>
             )

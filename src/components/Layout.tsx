@@ -11,10 +11,9 @@ const nav = [
 ]
 
 const menuItems = [
-  { to: '/messages', label: 'Messages', icon: '💬' },
+  { to: '/notifications', label: 'Notifications', icon: '🔔' },
   { to: '/settings', label: 'Settings', icon: '⚙️' },
   { to: '/household', label: 'Household', icon: '🏡' },
-  { to: '/notifications', label: 'Notifications', icon: '🔔' },
   { to: '/leaderboard', label: 'Leaderboard', icon: '🏆' },
 ]
 
@@ -185,7 +184,7 @@ export default function Layout() {
                 >
                   <span className="text-xl leading-none w-7 text-center">{icon}</span>
                   <span className="text-sm font-medium flex-1">{label}</span>
-                  {to === '/messages' && unreadCount > 0 && (
+                  {to === '/notifications' && unreadCount > 0 && (
                     <span className="min-w-[20px] h-5 bg-red-500 rounded-full text-[10px] text-white font-bold flex items-center justify-center px-1 leading-none">
                       {unreadCount > 9 ? '9+' : unreadCount}
                     </span>

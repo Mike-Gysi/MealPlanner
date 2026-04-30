@@ -1,4 +1,5 @@
 import { Fragment, useEffect, useRef, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { logActivity } from '../lib/activity'
 import { notifyUser } from '../lib/notifications'
@@ -45,6 +46,27 @@ export default function Todos() {
   const [loading, setLoading] = useState(true)
   const [tab, setTab] = useState<'open' | 'done'>('open')
   const [filterUser, setFilterUser] = useState<string>('all')
+  const [searchParams, setSearchParams] = useSearchParams()
+  const editingTodoRef = useRef<HTMLDivElement>(null)
+
+  // Open edit form when navigated here with ?edit=<id> (e.g. from a mention message)
+  useEffect(() => {
+    const editId = searchParams.get('edit')
+    if (!editId || todos.length === 0) return
+    const target = todos.find(t => t.id === editId)
+    if (!target) return
+    // Show both open and done tabs so the todo is visible
+    setTab(target.completed ? 'done' : 'open')
+    setEditingTodo(target)
+    setSearchParams(prev => { const n = new URLSearchParams(prev); n.delete('edit'); return n }, { replace: true })
+  }, [todos, searchParams])
+
+  // Scroll the editing todo into view when it opens
+  useEffect(() => {
+    if (!editingTodo) return
+    const t = setTimeout(() => editingTodoRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 80)
+    return () => clearTimeout(t)
+  }, [editingTodo?.id])
 
   useEffect(() => {
     if (!householdId) return
@@ -157,7 +179,9 @@ export default function Todos() {
         <div className="flex flex-col gap-2">
           {displayed.map(todo => (
             <Fragment key={todo.id}>
-              <TodoItem todo={todo} onToggle={toggleComplete} onDelete={deleteTodo} onEdit={setEditingTodo} isEditing={editingTodo?.id === todo.id} />
+              <div ref={editingTodo?.id === todo.id ? editingTodoRef : null}>
+                <TodoItem todo={todo} onToggle={toggleComplete} onDelete={deleteTodo} onEdit={setEditingTodo} isEditing={editingTodo?.id === todo.id} />
+              </div>
               {editingTodo?.id === todo.id && (
                 <TodoForm
                   profiles={profiles}
@@ -327,11 +351,17 @@ function TodoForm({ profiles, todo, householdId, onSave, onCancel }: TodoFormPro
       recur_month_day: recurring && recurType === 'monthly' ? monthDay : null,
       note: note.trim() || null,
     }
+    let todoId: string | undefined = todo?.id
     if (todo) {
       await supabase.from('todos').update(payload).eq('id', todo.id)
       logActivity('updated todo', 'todo', payload.name, householdId)
     } else {
-      await supabase.from('todos').insert({ ...payload, completed: false, household_id: householdId })
+      const { data: inserted } = await supabase
+        .from('todos')
+        .insert({ ...payload, completed: false, household_id: householdId })
+        .select('id')
+        .single()
+      todoId = inserted?.id
       logActivity('added todo', 'todo', payload.name, householdId)
     }
 
@@ -352,6 +382,7 @@ function TodoForm({ profiles, todo, householdId, onSave, onCancel }: TodoFormPro
             recipient_username: profile.username,
             body: `You were mentioned in a todo: "${payload.name}"`,
             read: false,
+            todo_id: todoId ?? null,
           })
           notifyUser(profile.id, senderId, householdId, `${senderUsername} mentioned you`, `In todo: "${payload.name}"`)
         }

@@ -14,7 +14,6 @@ import Settings from './pages/Settings'
 import HouseholdPage from './pages/HouseholdPage'
 import NotificationsPage from './pages/NotificationsPage'
 import LeaderboardPage from './pages/LeaderboardPage'
-import MessagesPage from './pages/MessagesPage'
 import HouseholdSetup from './pages/HouseholdSetup'
 import { HouseholdProvider, useHousehold } from './contexts/HouseholdContext'
 import type { Todo } from './types'
@@ -74,7 +73,6 @@ function AuthenticatedApp() {
               <Route path="/household" element={<HouseholdPage />} />
               <Route path="/notifications" element={<NotificationsPage />} />
               <Route path="/leaderboard" element={<LeaderboardPage />} />
-              <Route path="/messages" element={<MessagesPage />} />
             </Route>
             <Route path="*" element={<Navigate to="/" replace />} />
           </>
