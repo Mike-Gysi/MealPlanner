@@ -169,12 +169,30 @@ export default function ShoppingList() {
               {history.length === 0 && (
                 <p className="text-center text-zinc-600 py-10 text-sm">No history yet.</p>
               )}
-              {history.map(item => (
-                <div key={item.id} className="flex items-center justify-between bg-zinc-900 rounded-xl border border-zinc-800 px-3 py-2.5">
-                  <span className="text-sm text-zinc-400 truncate">{formatItem(item)}</span>
-                  <span className="text-xs text-zinc-600 flex-shrink-0 ml-2">{format(new Date(item.purchased_at), 'dd MMM')}</span>
-                </div>
-              ))}
+              {history.map(item => {
+                const inList = alreadyInList.has(item.name.toLowerCase())
+                return (
+                  <button
+                    key={item.id}
+                    onClick={() => !inList && addItem(item.name, item.quantity, item.unit)}
+                    disabled={inList}
+                    className={`flex items-center justify-between rounded-xl border px-3 py-2.5 w-full text-left transition-colors ${
+                      inList
+                        ? 'bg-zinc-900 border-zinc-800 cursor-default'
+                        : 'bg-zinc-900 border-zinc-800 hover:border-green-500/40 hover:bg-green-500/5 active:bg-green-500/10'
+                    }`}
+                  >
+                    <span className={`text-sm truncate ${inList ? 'text-zinc-600' : 'text-zinc-400'}`}>{formatItem(item)}</span>
+                    <div className="flex items-center gap-2 flex-shrink-0 ml-2">
+                      {inList
+                        ? <span className="text-[10px] text-green-600 font-medium">In list</span>
+                        : <span className="text-[10px] text-zinc-700">+ add</span>
+                      }
+                      <span className="text-xs text-zinc-600">{format(new Date(item.purchased_at), 'dd MMM')}</span>
+                    </div>
+                  </button>
+                )
+              })}
             </div>
           )}
         </div>
