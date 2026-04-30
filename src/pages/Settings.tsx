@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { CHANGELOG } from '../lib/changelog'
-import { format, parseISO } from 'date-fns'
+import { format, parseISO, startOfWeek } from 'date-fns'
 import { useHousehold } from '../contexts/HouseholdContext'
 import { getPermissionState, initNotifications, disableNotifications, isSubscribed, isPushSupported } from '../lib/notifications'
 
@@ -62,6 +62,10 @@ export default function Settings() {
   const [notifSubscribed, setNotifSubscribed] = useState(false)
   const [notifLoading, setNotifLoading] = useState(false)
   const [notifPrefs, setNotifPrefs] = useState<NotifPrefs>(DEFAULT_PREFS)
+
+  // Reset weekly stats
+  const [showResetModal, setShowResetModal] = useState(false)
+  const [resetting, setResetting] = useState(false)
 
   // Changelog
   const [showChangelog, setShowChangelog] = useState(false)
@@ -129,6 +133,19 @@ export default function Settings() {
     supabase.from('notification_preferences')
       .upsert({ user_id: currentUserId, ...updated }, { onConflict: 'user_id' })
       .then(() => {}, () => {})
+  }
+
+  async function resetWeeklyStats() {
+    if (!household) return
+    setResetting(true)
+    const weekStart = startOfWeek(new Date(), { weekStartsOn: 1 })
+    await supabase
+      .from('activity_log')
+      .delete()
+      .eq('household_id', household.id)
+      .gte('created_at', weekStart.toISOString())
+    setResetting(false)
+    setShowResetModal(false)
   }
 
   const changed = username.trim() !== initial && username.trim() !== ''
@@ -258,6 +275,18 @@ export default function Settings() {
         </div>
       )}
 
+      {/* Statistics */}
+      {household && (
+        <div className="flex flex-col gap-2">
+          <button
+            onClick={() => setShowResetModal(true)}
+            className="w-full border border-zinc-800 text-zinc-500 hover:text-red-400 hover:border-red-500/30 rounded-xl py-2.5 text-sm transition-colors"
+          >
+            Reset weekly statistics
+          </button>
+        </div>
+      )}
+
       {/* Changelog */}
       <div className="flex flex-col gap-2">
         <button
@@ -292,6 +321,46 @@ export default function Settings() {
                   </div>
                 </div>
               ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Reset weekly stats confirmation */}
+      {showResetModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4"
+          onClick={() => !resetting && setShowResetModal(false)}
+        >
+          <div
+            className="bg-zinc-900 border border-red-500/30 w-full max-w-sm rounded-2xl shadow-2xl"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="px-5 py-4 border-b border-zinc-800 flex items-center gap-3">
+              <span className="text-xl leading-none">⚠️</span>
+              <h3 className="font-semibold text-red-400">Reset weekly statistics?</h3>
+            </div>
+            <div className="p-5 flex flex-col gap-4">
+              <p className="text-sm text-zinc-300 leading-relaxed">
+                This will clear all activity recorded this week for your household. The leaderboard will show no data until new activity is logged.
+              </p>
+              <p className="text-xs text-zinc-500">This cannot be undone.</p>
+              <div className="flex gap-2 mt-1">
+                <button
+                  onClick={() => setShowResetModal(false)}
+                  disabled={resetting}
+                  className="flex-1 border border-zinc-700 rounded-xl py-2.5 text-sm text-zinc-400 hover:bg-zinc-800 disabled:opacity-30 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={resetWeeklyStats}
+                  disabled={resetting}
+                  className="flex-1 bg-red-500 hover:bg-red-400 text-white rounded-xl py-2.5 text-sm font-bold disabled:opacity-40 transition-colors"
+                >
+                  {resetting ? 'Resetting…' : 'Reset'}
+                </button>
+              </div>
             </div>
           </div>
         </div>
