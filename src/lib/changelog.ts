@@ -6,6 +6,11 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    "hash": "2bc9a07",
+    "date": "2026-04-29",
+    "message": "Set up timer function for reminders."
+  },
+  {
     "hash": "e022fb2",
     "date": "2026-04-29",
     "message": "Fixed UTC to local time."

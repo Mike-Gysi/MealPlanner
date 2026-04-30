@@ -11,7 +11,6 @@ const nav = [
   { to: '/shopping', label: 'Shopping', icon: '🛒' },
   { to: '/todos', label: 'Todos', icon: '✅' },
   { to: '/recipes', label: 'Recipes', icon: '🍽️' },
-  { to: '/settings', label: 'Settings', icon: '⚙️' },
 ]
 
 interface ActivityGroup {
@@ -248,29 +247,26 @@ export default function Home() {
       }
     `}</style>
     <div className="flex flex-col items-center px-6 py-10 gap-10 pb-24">
-      {/* Title */}
+      {/* Bee animation */}
       <div className="text-center">
-        <h1 className="text-5xl font-extrabold text-green-400 tracking-tight">
-          <span className="relative inline-block">
-            <span style={{ opacity: beeDone ? 1 : 0 }}>🐝</span>
-            {!beeDone && (
-              <span
-                className="absolute top-0 left-0 pointer-events-none"
-                style={{ animation: 'bee-fly-in 2s cubic-bezier(0.4, 0, 0.2, 1) forwards' }}
-              >🐝</span>
-            )}
-          </span>
-          {' '}The Bee Hive
-        </h1>
+        <span className="relative inline-block text-6xl">
+          <span style={{ opacity: beeDone ? 1 : 0 }}>🐝</span>
+          {!beeDone && (
+            <span
+              className="absolute top-0 left-0 pointer-events-none"
+              style={{ animation: 'bee-fly-in 2s cubic-bezier(0.4, 0, 0.2, 1) forwards' }}
+            >🐝</span>
+          )}
+        </span>
         {username && (
           <p className="text-zinc-400 mt-3 text-base">
-            Hello <span className="text-zinc-200 font-semibold">{username}</span>, welcome back
+            Welcome back, <span className="text-zinc-200 font-semibold">{username}</span>
           </p>
         )}
       </div>
 
       {/* Nav grid */}
-      <div className="grid grid-cols-3 gap-4 w-full max-w-xs">
+      <div className="grid grid-cols-2 gap-4 w-full max-w-xs">
         {nav.map(({ to, label, icon }) => (
           <button
             key={to}

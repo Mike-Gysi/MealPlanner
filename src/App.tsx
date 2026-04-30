@@ -11,6 +11,9 @@ import ShoppingList from './pages/ShoppingList'
 import Recipes from './pages/Recipes'
 import Todos from './pages/Todos'
 import Settings from './pages/Settings'
+import HouseholdPage from './pages/HouseholdPage'
+import NotificationsPage from './pages/NotificationsPage'
+import LeaderboardPage from './pages/LeaderboardPage'
 import HouseholdSetup from './pages/HouseholdSetup'
 import { HouseholdProvider, useHousehold } from './contexts/HouseholdContext'
 import type { Todo } from './types'
@@ -60,13 +63,16 @@ function AuthenticatedApp() {
           </>
         ) : (
           <>
-            <Route path="/" element={<Home />} />
             <Route element={<Layout />}>
+              <Route path="/" element={<Home />} />
               <Route path="/calendar" element={<CalendarPage />} />
               <Route path="/shopping" element={<ShoppingList />} />
               <Route path="/todos" element={<Todos />} />
               <Route path="/recipes" element={<Recipes />} />
               <Route path="/settings" element={<Settings />} />
+              <Route path="/household" element={<HouseholdPage />} />
+              <Route path="/notifications" element={<NotificationsPage />} />
+              <Route path="/leaderboard" element={<LeaderboardPage />} />
             </Route>
             <Route path="*" element={<Navigate to="/" replace />} />
           </>
