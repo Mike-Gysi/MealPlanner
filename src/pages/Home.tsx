@@ -1,17 +1,9 @@
 import { useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
 import { format, isToday, isYesterday, parseISO, formatDistanceToNow, differenceInCalendarDays } from 'date-fns'
 import { supabase } from '../lib/supabase'
 import { fetchRecentActivity, type ActivityItem } from '../lib/activity'
 import { fetchLeaderboard, type LeaderboardData } from '../lib/leaderboard'
 import { useHousehold } from '../contexts/HouseholdContext'
-
-const nav = [
-  { to: '/calendar', label: 'Calendar', icon: '📅' },
-  { to: '/shopping', label: 'Shopping', icon: '🛒' },
-  { to: '/todos', label: 'Todos', icon: '✅' },
-  { to: '/recipes', label: 'Recipes', icon: '🍽️' },
-]
 
 interface ActivityGroup {
   key: string
@@ -153,7 +145,6 @@ export default function Home() {
   const householdId = household?.id ?? ''
   const [weeklyLB, setWeeklyLB] = useState<LeaderboardData | null>(null)
   const [upcomingTodos, setUpcomingTodos] = useState<UpcomingTodo[]>([])
-  const navigate = useNavigate()
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => {
@@ -247,36 +238,25 @@ export default function Home() {
       }
     `}</style>
     <div className="flex flex-col items-center px-6 py-10 gap-10 pb-24">
-      {/* Bee animation */}
+      {/* Hero title with bee animation */}
       <div className="text-center">
-        <span className="relative inline-block text-6xl">
-          <span style={{ opacity: beeDone ? 1 : 0 }}>🐝</span>
-          {!beeDone && (
-            <span
-              className="absolute top-0 left-0 pointer-events-none"
-              style={{ animation: 'bee-fly-in 2s cubic-bezier(0.4, 0, 0.2, 1) forwards' }}
-            >🐝</span>
-          )}
-        </span>
+        <h1 className="text-5xl font-extrabold text-green-400 tracking-tight">
+          <span className="relative inline-block">
+            <span style={{ opacity: beeDone ? 1 : 0 }}>🐝</span>
+            {!beeDone && (
+              <span
+                className="absolute top-0 left-0 pointer-events-none"
+                style={{ animation: 'bee-fly-in 2s cubic-bezier(0.4, 0, 0.2, 1) forwards' }}
+              >🐝</span>
+            )}
+          </span>
+          {' '}The Bee Hive
+        </h1>
         {username && (
           <p className="text-zinc-400 mt-3 text-base">
-            Welcome back, <span className="text-zinc-200 font-semibold">{username}</span>
+            Hello <span className="text-zinc-200 font-semibold">{username}</span>, welcome to the Bee Hive
           </p>
         )}
-      </div>
-
-      {/* Nav grid */}
-      <div className="grid grid-cols-2 gap-4 w-full max-w-xs">
-        {nav.map(({ to, label, icon }) => (
-          <button
-            key={to}
-            onClick={() => navigate(to)}
-            className="aspect-square flex flex-col items-center justify-center gap-2 bg-zinc-800 hover:bg-zinc-700 active:bg-zinc-600 rounded-2xl transition-colors border border-zinc-700"
-          >
-            <span className="text-3xl leading-none">{icon}</span>
-            <span className="text-xs text-zinc-300 font-medium">{label}</span>
-          </button>
-        ))}
       </div>
 
       {/* Personal leaderboard notices */}
